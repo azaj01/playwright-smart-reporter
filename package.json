@@ -1,9 +1,12 @@
 {
   "name": "playwright-smart-reporter",
-  "version": "0.1.1",
+  "version": "0.5.0",
   "description": "An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, and performance regression alerts",
   "main": "dist/smart-reporter.js",
   "types": "dist/smart-reporter.d.ts",
+  "bin": {
+    "playwright-smart-reporter-merge-history": "./dist/bin/merge-history.js"
+  },
   "files": [
     "dist"
   ],
@@ -19,7 +22,12 @@
     "html-reporter",
     "ai",
     "flaky-tests",
-    "performance"
+    "performance",
+    "test-analysis",
+    "test-stability",
+    "retry-analysis",
+    "failure-clustering",
+    "trace-viewer"
   ],
   "author": "Gary Parker",
   "license": "MIT",

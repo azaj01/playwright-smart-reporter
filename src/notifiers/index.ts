@@ -1,0 +1,6 @@
+/**
+ * Barrel export for all notifier modules
+ */
+
+export { SlackNotifier } from './slack-notifier';
+export { TeamsNotifier } from './teams-notifier';

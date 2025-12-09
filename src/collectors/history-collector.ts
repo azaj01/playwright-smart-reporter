@@ -1,0 +1,177 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions } from '../types';
+
+/**
+ * Manages test history persistence and retrieval
+ */
+export class HistoryCollector {
+  private history: TestHistory = { runs: [], tests: {}, summaries: [] };
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId'>;
+  private outputDir: string;
+  private currentRun: RunMetadata;
+  private startTime: number;
+
+  constructor(options: SmartReporterOptions, outputDir: string) {
+    this.options = {
+      outputFile: options.outputFile ?? 'smart-report.html',
+      historyFile: options.historyFile ?? 'test-history.json',
+      maxHistoryRuns: options.maxHistoryRuns ?? 10,
+      performanceThreshold: options.performanceThreshold ?? 0.2,
+      enableRetryAnalysis: options.enableRetryAnalysis ?? true,
+      enableFailureClustering: options.enableFailureClustering ?? true,
+      enableStabilityScore: options.enableStabilityScore ?? true,
+      enableGalleryView: options.enableGalleryView ?? true,
+      enableComparison: options.enableComparison ?? true,
+      enableAIRecommendations: options.enableAIRecommendations ?? true,
+      stabilityThreshold: options.stabilityThreshold ?? 70,
+      retryFailureThreshold: options.retryFailureThreshold ?? 3,
+      slackWebhook: options.slackWebhook,
+      teamsWebhook: options.teamsWebhook,
+      baselineRunId: options.baselineRunId,
+    };
+    this.outputDir = outputDir;
+    this.currentRun = {
+      runId: `run-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+    };
+    this.startTime = Date.now();
+  }
+
+  /**
+   * Load test history from disk
+   */
+  loadHistory(): void {
+    const historyPath = path.resolve(this.outputDir, this.options.historyFile);
+    if (fs.existsSync(historyPath)) {
+      try {
+        const loaded = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+        // Support both old and new format
+        if (loaded.tests) {
+          // New format
+          this.history = loaded;
+        } else {
+          // Old format: convert to new format
+          this.history = { runs: [], tests: loaded, summaries: [] };
+        }
+
+        // Ensure summaries array exists
+        if (!this.history.summaries) {
+          this.history.summaries = [];
+        }
+      } catch (err) {
+        console.warn('Failed to load history:', err);
+        this.history = { runs: [], tests: {}, summaries: [] };
+      }
+    }
+  }
+
+  /**
+   * Update history with test results
+   */
+  updateHistory(results: TestResultData[]): void {
+    const timestamp = new Date().toISOString();
+
+    for (const result of results) {
+      if (!this.history.tests[result.testId]) {
+        this.history.tests[result.testId] = [];
+      }
+
+      this.history.tests[result.testId].push({
+        passed: result.status === 'passed',
+        duration: result.duration,
+        timestamp,
+        skipped: result.status === 'skipped',
+        retry: result.retry, // NEW: Track retry count
+      });
+
+      // Keep only last N runs
+      if (this.history.tests[result.testId].length > this.options.maxHistoryRuns) {
+        this.history.tests[result.testId] = this.history.tests[result.testId].slice(
+          -this.options.maxHistoryRuns
+        );
+      }
+    }
+
+    // Add run summary
+    const passed = results.filter(r => r.status === 'passed').length;
+    const failed = results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
+    const skipped = results.filter(r => r.status === 'skipped').length;
+    const flaky = results.filter(r => r.flakinessScore && r.flakinessScore >= 0.3).length;
+    const slow = results.filter(r => r.performanceTrend?.startsWith('↑')).length;
+    const total = results.length;
+    const duration = Date.now() - this.startTime;
+
+    const summary: RunSummary = {
+      runId: this.currentRun.runId,
+      timestamp: this.currentRun.timestamp,
+      total,
+      passed,
+      failed,
+      skipped,
+      flaky,
+      slow,
+      duration,
+      passRate: (passed + failed) > 0 ? Math.round((passed / (passed + failed)) * 100) : 0,
+    };
+
+    this.history.summaries!.push(summary);
+
+    // Keep only last N summaries
+    if (this.history.summaries!.length > this.options.maxHistoryRuns) {
+      this.history.summaries = this.history.summaries!.slice(-this.options.maxHistoryRuns);
+    }
+
+    // Save to disk
+    const historyPath = path.resolve(this.outputDir, this.options.historyFile);
+    fs.writeFileSync(historyPath, JSON.stringify(this.history, null, 2));
+  }
+
+  /**
+   * Get history for a specific test
+   */
+  getTestHistory(testId: string): TestHistoryEntry[] {
+    return this.history.tests[testId] || [];
+  }
+
+  /**
+   * Get full history
+   */
+  getHistory(): TestHistory {
+    return this.history;
+  }
+
+  /**
+   * Get current run metadata
+   */
+  getCurrentRun(): RunMetadata {
+    return this.currentRun;
+  }
+
+  /**
+   * Get options
+   */
+  getOptions(): SmartReporterOptions {
+    return this.options;
+  }
+
+  /**
+   * Get baseline run for comparison (if enabled)
+   */
+  getBaselineRun(): RunSummary | null {
+    if (!this.options.enableComparison || !this.history.summaries) {
+      return null;
+    }
+
+    // If specific baseline specified, find it
+    if (this.options.baselineRunId) {
+      return this.history.summaries.find(s => s.runId === this.options.baselineRunId) || null;
+    }
+
+    // Otherwise, use previous run
+    return this.history.summaries.length > 0
+      ? this.history.summaries[this.history.summaries.length - 1]
+      : null;
+  }
+}
