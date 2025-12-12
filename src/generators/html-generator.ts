@@ -37,6 +37,13 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const total = results.length;
   const passRate = (passed + failed) > 0 ? Math.round((passed / (passed + failed)) * 100) : 0;
 
+  // Calculate stability grade counts
+  const gradeA = results.filter((r) => r.stabilityScore && r.stabilityScore.grade === 'A').length;
+  const gradeB = results.filter((r) => r.stabilityScore && r.stabilityScore.grade === 'B').length;
+  const gradeC = results.filter((r) => r.stabilityScore && r.stabilityScore.grade === 'C').length;
+  const gradeD = results.filter((r) => r.stabilityScore && r.stabilityScore.grade === 'D').length;
+  const gradeF = results.filter((r) => r.stabilityScore && r.stabilityScore.grade === 'F').length;
+
   const testsJson = JSON.stringify(results);
 
   // Feature flags
@@ -139,6 +146,16 @@ ${generateStyles(passRate)}
       <button class="filter-btn" data-filter="skipped" onclick="filterTests('skipped')">Skipped (${skipped})</button>
       <button class="filter-btn" data-filter="flaky" onclick="filterTests('flaky')">Flaky (${flaky})</button>
       <button class="filter-btn" data-filter="slow" onclick="filterTests('slow')">Slow (${slow})</button>
+    </div>
+
+    <!-- Stability Score Filters -->
+    <div class="filters stability-filters">
+      <span class="filter-label">📊 Stability Score:</span>
+      <button class="filter-btn stability-grade" data-filter="grade-a" onclick="filterTests('grade-a')">A (${gradeA})</button>
+      <button class="filter-btn stability-grade" data-filter="grade-b" onclick="filterTests('grade-b')">B (${gradeB})</button>
+      <button class="filter-btn stability-grade" data-filter="grade-c" onclick="filterTests('grade-c')">C (${gradeC})</button>
+      <button class="filter-btn stability-grade" data-filter="grade-d" onclick="filterTests('grade-d')">D (${gradeD})</button>
+      <button class="filter-btn stability-grade" data-filter="grade-f" onclick="filterTests('grade-f')">F (${gradeF})</button>
     </div>
 
     <!-- Test List -->
@@ -493,50 +510,6 @@ function generateStyles(passRate: number): string {
       margin-top: 4px;
     }
 
-    .trend-legend {
-      display: flex;
-      justify-content: center;
-      gap: 2rem;
-      margin-top: 1.25rem;
-      padding-top: 1.25rem;
-      border-top: 1px solid var(--border-subtle);
-    }
-
-    .trend-legend-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 6px 10px;
-      border-radius: 6px;
-      transition: all 0.2s ease;
-    }
-
-    .trend-legend-item:hover {
-      background: var(--bg-card);
-      color: var(--text-primary);
-      transform: scale(1.05);
-    }
-
-    .trend-legend-item:hover .trend-legend-dot {
-      transform: scale(1.2);
-      box-shadow: 0 0 8px currentColor;
-    }
-
-    .trend-legend-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 4px;
-      transition: all 0.2s ease;
-    }
-
-    .trend-legend-dot.good { background: var(--accent-green); }
-    .trend-legend-dot.warning { background: var(--accent-yellow); }
-    .trend-legend-dot.bad { background: var(--accent-red); }
-    .trend-legend-dot.skipped { background: var(--text-muted); }
-    .trend-legend-dot.duration { background: var(--accent-purple); }
 
     /* Stacked Bar Styles */
     .trend-stacked-bar {
@@ -625,29 +598,21 @@ function generateStyles(passRate: number): string {
       border: 2px solid var(--text-primary);
     }
 
-    /* Secondary Trend Sections (Duration, Flaky, Slow) */
+    /* Secondary Trend Sections (Duration, Flaky, Slow) - Aligned with main trends */
     .secondary-trends {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      display: flex;
+      flex-direction: column;
       gap: 1.25rem;
       margin-top: 1.75rem;
-      padding-top: 1.75rem;
-      border-top: 1px solid var(--border-subtle);
       max-width: 100%;
-      overflow-x: hidden;
-    }
-
-    @media (max-width: 768px) {
-      .secondary-trends {
-        grid-template-columns: 1fr;
-      }
     }
 
     .secondary-trend-section {
       background: var(--bg-primary);
-      border-radius: 10px;
+      border-radius: 12px;
       border: 1px solid var(--border-subtle);
-      padding: 1rem 1.25rem;
+      padding: 1rem 0;
+      width: 100%;
     }
 
     .secondary-trend-header {
@@ -655,6 +620,7 @@ function generateStyles(passRate: number): string {
       justify-content: space-between;
       align-items: center;
       margin-bottom: 0.875rem;
+      padding: 0 16px;
     }
 
     .secondary-trend-title {
@@ -669,9 +635,37 @@ function generateStyles(passRate: number): string {
     .secondary-trend-chart {
       display: flex;
       align-items: flex-end;
-      gap: 6px;
+      gap: 10px;
       height: 50px;
-      padding: 4px 0;
+      padding: 8px 16px 12px;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+      scrollbar-width: auto;
+      scrollbar-color: rgba(100, 100, 100, 0.6) rgba(0, 0, 0, 0.08);
+    }
+
+    .secondary-trend-chart::-webkit-scrollbar {
+      height: 10px;
+    }
+
+    .secondary-trend-chart::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.08);
+      border-radius: 4px;
+    }
+
+    .secondary-trend-chart::-webkit-scrollbar-thumb {
+      background: rgba(100, 100, 100, 0.6);
+      border-radius: 4px;
+      min-width: 40px;
+    }
+
+    .secondary-trend-chart::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 100, 100, 0.9);
+    }
+
+    /* Force scrollbars to always be visible */
+    .secondary-trend-chart::-webkit-scrollbar-button {
+      display: none;
     }
 
     .secondary-bar-wrapper {
@@ -679,8 +673,8 @@ function generateStyles(passRate: number): string {
       flex-direction: column;
       align-items: center;
       flex: 1;
-      min-width: 24px;
-      max-width: 44px;
+      min-width: 40px;
+      max-width: 60px;
       cursor: pointer;
       transition: transform 0.2s ease;
     }
@@ -695,48 +689,49 @@ function generateStyles(passRate: number): string {
 
     .secondary-bar {
       width: 100%;
-      border-radius: 4px 4px 1px 1px;
-      transition: all 0.3s ease;
+      border-radius: 6px 6px 2px 2px;
+      transition: all 0.2s ease;
     }
 
     .secondary-bar:hover {
-      transform: scaleY(1.08);
+      transform: scaleY(1.05);
     }
 
     .secondary-bar.current {
-      border: 1px solid var(--text-primary);
+      box-shadow: 0 0 20px rgba(0, 255, 136, 0.4), 0 2px 8px rgba(0, 255, 136, 0.3);
+      border: 2px solid var(--text-primary);
     }
 
     /* Duration bars */
     .secondary-bar.duration {
       background: linear-gradient(180deg, var(--accent-purple) 0%, #7744cc 100%);
-      box-shadow: 0 2px 6px rgba(170, 102, 255, 0.2);
+      box-shadow: 0 2px 8px rgba(170, 102, 255, 0.2);
     }
 
     .secondary-bar.duration:hover {
-      box-shadow: 0 4px 12px rgba(170, 102, 255, 0.4);
+      box-shadow: 0 4px 16px rgba(170, 102, 255, 0.3);
       background: linear-gradient(180deg, #bb88ff 0%, var(--accent-purple) 100%);
     }
 
     /* Flaky bars */
     .secondary-bar.flaky {
       background: linear-gradient(180deg, var(--accent-yellow) 0%, var(--accent-yellow-dim) 100%);
-      box-shadow: 0 2px 6px rgba(255, 204, 0, 0.2);
+      box-shadow: 0 2px 8px rgba(255, 204, 0, 0.2);
     }
 
     .secondary-bar.flaky:hover {
-      box-shadow: 0 4px 12px rgba(255, 204, 0, 0.4);
+      box-shadow: 0 4px 16px rgba(255, 204, 0, 0.3);
       background: linear-gradient(180deg, #ffdd44 0%, var(--accent-yellow) 100%);
     }
 
     /* Slow bars */
     .secondary-bar.slow {
       background: linear-gradient(180deg, var(--accent-orange) 0%, #cc6633 100%);
-      box-shadow: 0 2px 6px rgba(255, 136, 68, 0.2);
+      box-shadow: 0 2px 8px rgba(255, 136, 68, 0.2);
     }
 
     .secondary-bar.slow:hover {
-      box-shadow: 0 4px 12px rgba(255, 136, 68, 0.4);
+      box-shadow: 0 4px 16px rgba(255, 136, 68, 0.3);
       background: linear-gradient(180deg, #ffaa66 0%, var(--accent-orange) 100%);
     }
 
@@ -892,6 +887,29 @@ function generateStyles(passRate: number): string {
       background: var(--text-primary);
       color: var(--bg-primary);
       border-color: var(--text-primary);
+    }
+
+    /* Stability Score Filters */
+    .stability-filters {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: -0.5rem;
+    }
+
+    .filter-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-right: 0.5rem;
+    }
+
+    .filter-btn.stability-grade {
+      min-width: 50px;
+    }
+
+    .filter-btn.stability-grade.active {
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
     }
 
     /* Search Container */
@@ -1941,15 +1959,22 @@ function generateScripts(testsJson: string, includeGallery: boolean, includeComp
         const status = card.dataset.status;
         const isFlaky = card.dataset.flaky === 'true';
         const isSlow = card.dataset.slow === 'true';
+        const grade = card.dataset.grade;
 
         let show = filter === 'all' ||
           (filter === 'passed' && status === 'passed') ||
           (filter === 'failed' && (status === 'failed' || status === 'timedOut')) ||
           (filter === 'skipped' && status === 'skipped') ||
           (filter === 'flaky' && isFlaky) ||
-          (filter === 'slow' && isSlow);
+          (filter === 'slow' && isSlow) ||
+          (filter === 'grade-a' && grade === 'A') ||
+          (filter === 'grade-b' && grade === 'B') ||
+          (filter === 'grade-c' && grade === 'C') ||
+          (filter === 'grade-d' && grade === 'D') ||
+          (filter === 'grade-f' && grade === 'F');
 
         card.style.display = show ? 'block' : 'none';
+      });
 
       // Update group visibility
       document.querySelectorAll('.file-group').forEach(group => {
@@ -1957,7 +1982,6 @@ function generateScripts(testsJson: string, includeGallery: boolean, includeComp
           card => card.style.display !== 'none'
         );
         group.style.display = hasVisible ? 'block' : 'none';
-      });
       });
     }
 
@@ -1993,6 +2017,16 @@ function generateScripts(testsJson: string, includeGallery: boolean, includeComp
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
+
+    // Auto-scroll secondary charts to show most recent run
+    function scrollChartsToRight() {
+      document.querySelectorAll('.secondary-trend-chart').forEach(chart => {
+        chart.scrollLeft = chart.scrollWidth;
+      });
+    }
+
+    // Run on page load
+    window.addEventListener('DOMContentLoaded', scrollChartsToRight);
 
 ${includeGallery ? `    // Gallery functions\n${generateGalleryScript()}` : ''}
 

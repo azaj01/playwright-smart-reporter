@@ -50,3 +50,13 @@ export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) return str;
   return str.substring(0, maxLength - 3) + '...';
 }
+
+/**
+ * Strip ANSI escape codes from a string
+ * @param str - String containing ANSI codes
+ * @returns String with ANSI codes removed
+ */
+export function stripAnsiCodes(str: string): string {
+  // Remove ANSI escape sequences (e.g., \x1b[31m, \x1b[0m, etc.)
+  return str.replace(/\x1b\[[0-9;]*m/g, '');
+}

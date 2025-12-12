@@ -12,6 +12,8 @@ export class RetryAnalyzer {
 
   /**
    * Analyze retry pattern for a test
+   * @param test - The test result to analyze
+   * @param history - Historical test results for this test
    */
   analyze(test: TestResultData, history: TestHistoryEntry[]): void {
     const retryInfo = this.calculateRetryInfo(test, history);
@@ -20,9 +22,13 @@ export class RetryAnalyzer {
 
   /**
    * Calculate detailed retry information
+   * @param test - The test result
+   * @param history - Historical test results
+   * @returns Retry information object
    */
   private calculateRetryInfo(test: TestResultData, history: TestHistoryEntry[]): RetryInfo {
     const totalRetries = test.retry;
+    // passedOnRetry: Index of the retry on which test passed (0-based), or -1 if never passed
     const passedOnRetry = test.status === 'passed' && totalRetries > 0 ? totalRetries : -1;
     const failedRetries = test.status === 'failed' || test.status === 'timedOut' ? totalRetries : 0;
 

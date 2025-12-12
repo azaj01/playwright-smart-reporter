@@ -74,12 +74,19 @@ export class FailureClusterer {
 
   /**
    * Assign cluster information to test results
+   * @param results - Array of test results
+   * @param clusters - Array of failure clusters
    */
   assignClusters(results: TestResultData[], clusters: FailureCluster[]): void {
     // Create a map of test ID to cluster for quick lookup
     const testToCluster = new Map<string, FailureCluster>();
 
     for (const cluster of clusters) {
+      // Add null check for cluster.tests
+      if (!cluster.tests || !Array.isArray(cluster.tests)) {
+        continue;
+      }
+
       for (const test of cluster.tests) {
         testToCluster.set(test.testId, cluster);
       }

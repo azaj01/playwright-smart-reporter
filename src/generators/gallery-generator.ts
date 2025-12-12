@@ -125,8 +125,8 @@ function generateGalleryItem(item: GalleryItem): string {
         <div class="gallery-item-info">
           <div class="gallery-item-title" title="${escapeHtml(item.testTitle)}">${escapeHtml(item.testTitle)}</div>
           <div class="gallery-item-status ${statusClass}">${item.status}</div>
-          <a href="file://${item.tracePath}" class="gallery-item-link" target="_blank" onclick="event.stopPropagation()">
-            Open Trace
+          <a href="${item.tracePath}" class="gallery-item-link" download onclick="event.stopPropagation()">
+            📥 Download Trace
           </a>
         </div>
       </div>

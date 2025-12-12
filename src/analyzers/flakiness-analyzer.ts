@@ -4,14 +4,10 @@ import type { TestResultData, TestHistoryEntry } from '../types';
  * Analyzes test flakiness based on historical pass/fail patterns
  */
 export class FlakinessAnalyzer {
-  private performanceThreshold: number;
-
-  constructor(performanceThreshold: number = 0.2) {
-    this.performanceThreshold = performanceThreshold;
-  }
-
   /**
    * Calculate flakiness score and indicator for a test
+   * @param test - The test result to analyze
+   * @param history - Historical test results for this test
    */
   analyze(test: TestResultData, history: TestHistoryEntry[]): void {
     // For skipped tests, set a special indicator

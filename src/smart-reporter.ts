@@ -51,8 +51,9 @@ import {
 // ============================================================================
 
 import { generateHtml, type HtmlGeneratorData } from './generators/html-generator';
+import { buildComparison } from './generators/comparison-generator';
 import { SlackNotifier, TeamsNotifier } from './notifiers';
-import { formatDuration } from './utils';
+import { formatDuration, stripAnsiCodes } from './utils';
 
 // ============================================================================
 // Smart Reporter
@@ -105,6 +106,9 @@ class SmartReporter implements Reporter {
 
   /**
    * Called when the test run begins
+   * Initializes collectors, analyzers, and loads test history
+   * @param config - Playwright full configuration
+   * @param _suite - Root test suite (unused)
    */
   onBegin(config: FullConfig, _suite: Suite): void {
     this.startTime = Date.now();
@@ -119,7 +123,7 @@ class SmartReporter implements Reporter {
     const retryFailureThreshold = this.options.retryFailureThreshold ?? 3;
     const stabilityThreshold = this.options.stabilityThreshold ?? 70;
 
-    this.flakinessAnalyzer = new FlakinessAnalyzer(performanceThreshold);
+    this.flakinessAnalyzer = new FlakinessAnalyzer();
     this.performanceAnalyzer = new PerformanceAnalyzer(performanceThreshold);
     this.retryAnalyzer = new RetryAnalyzer(retryFailureThreshold);
     this.stabilityScorer = new StabilityScorer(stabilityThreshold);
@@ -131,6 +135,9 @@ class SmartReporter implements Reporter {
 
   /**
    * Called when a test completes
+   * Collects test data, runs analyzers, and stores results
+   * @param test - Playwright test case
+   * @param result - Test execution result
    */
   onTestEnd(test: TestCase, result: TestResult): void {
     const testId = this.getTestId(test);
@@ -154,11 +161,12 @@ class SmartReporter implements Reporter {
       history,
     };
 
-    // Add error if failed
+    // Add error if failed (strip ANSI codes for clean display)
     if (result.status === 'failed' || result.status === 'timedOut') {
       const error = result.errors[0];
       if (error) {
-        testData.error = error.stack || error.message || 'Unknown error';
+        const rawError = error.stack || error.message || 'Unknown error';
+        testData.error = stripAnsiCodes(rawError);
       }
     }
 
@@ -183,6 +191,8 @@ class SmartReporter implements Reporter {
 
   /**
    * Called when the test run completes
+   * Performs final analysis, generates HTML report, updates history, and sends notifications
+   * @param result - Full test run result
    */
   async onEnd(result: FullResult): Promise<void> {
     // Get failure clusters
@@ -202,12 +212,86 @@ class SmartReporter implements Reporter {
     if (options.enableComparison !== false) {
       const baselineRun = this.historyCollector.getBaselineRun();
       if (baselineRun) {
-        // TODO: Implement comparison logic
-        // This would compare current run against baseline
+        // Build current run summary
+        const passed = this.results.filter(r => r.status === 'passed').length;
+        const failed = this.results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
+        const skipped = this.results.filter(r => r.status === 'skipped').length;
+        const flaky = this.results.filter(r => r.flakinessScore && r.flakinessScore >= 0.3).length;
+        const slow = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
+        const duration = Date.now() - this.startTime;
+
+        const currentSummary = {
+          runId: this.historyCollector.getCurrentRun().runId,
+          timestamp: this.historyCollector.getCurrentRun().timestamp,
+          total: this.results.length,
+          passed,
+          failed,
+          skipped,
+          flaky,
+          slow,
+          duration,
+          passRate: (passed + failed) > 0 ? Math.round((passed / (passed + failed)) * 100) : 0,
+        };
+
+        // Build baseline tests map from history
+        const baselineTests = new Map<string, TestResultData>();
+        const history = this.historyCollector.getHistory();
+
+        // Reconstruct baseline test results from history
+        for (const [testId, entries] of Object.entries(history.tests)) {
+          if (entries.length > 0) {
+            const lastEntry = entries[entries.length - 1];
+            const matchingTest = this.results.find(r => r.testId === testId);
+
+            if (matchingTest) {
+              baselineTests.set(testId, {
+                ...matchingTest,
+                status: lastEntry.passed ? 'passed' : 'failed',
+                duration: lastEntry.duration,
+              });
+            }
+          }
+        }
+
+        comparison = buildComparison(
+          this.results,
+          currentSummary,
+          baselineRun,
+          baselineTests
+        );
       }
     }
 
-    // Prepare data for HTML generation
+    // Use dynamic import to support both CommonJS and ESM
+    const fs = await import('fs');
+    const outputPath = path.resolve(this.outputDir, this.options.outputFile ?? 'smart-report.html');
+
+    // Copy trace files to traces subdirectory for browser download BEFORE HTML generation
+    const tracesDir = path.join(path.dirname(outputPath), 'traces');
+    const traceResults = this.results.filter(r => r.attachments?.traces && r.attachments.traces.length > 0);
+
+    if (traceResults.length > 0) {
+      if (!fs.existsSync(tracesDir)) {
+        fs.mkdirSync(tracesDir, { recursive: true });
+      }
+
+      for (const result of traceResults) {
+        if (result.attachments && result.attachments.traces) {
+          for (let i = 0; i < result.attachments.traces.length; i++) {
+            const tracePath = result.attachments.traces[i];
+            if (fs.existsSync(tracePath)) {
+              const traceFileName = `${result.testId}-trace-${i}.zip`;
+              const destPath = path.join(tracesDir, traceFileName);
+              fs.copyFileSync(tracePath, destPath);
+              // Update the path to relative for HTML
+              result.attachments.traces[i] = `./traces/${traceFileName}`;
+            }
+          }
+        }
+      }
+    }
+
+    // Prepare data for HTML generation (after trace paths are updated)
     const htmlData: HtmlGeneratorData = {
       results: this.results,
       history: this.historyCollector.getHistory(),
@@ -218,10 +302,6 @@ class SmartReporter implements Reporter {
 
     // Generate and save HTML report
     const html = generateHtml(htmlData);
-    const outputPath = path.resolve(this.outputDir, this.options.outputFile ?? 'smart-report.html');
-
-    // Use dynamic import to support both CommonJS and ESM
-    const fs = await import('fs');
     fs.writeFileSync(outputPath, html);
     console.log(`\n📊 Smart Report: ${outputPath}`);
 

@@ -145,10 +145,6 @@ export function generateTrendChart(data: ChartData): string {
         ${bars}
         ${currentBar}
       </div>
-      <div class="trend-legend">
-        <div class="trend-legend-item"><span class="trend-legend-dot good"></span> Passed</div>
-        <div class="trend-legend-item"><span class="trend-legend-dot bad"></span> Failed</div>
-      </div>
       <div class="secondary-trends">
         <div class="secondary-trend-section">
           <div class="secondary-trend-header">
