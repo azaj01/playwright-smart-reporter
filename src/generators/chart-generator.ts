@@ -28,150 +28,166 @@ export function generateTrendChart(data: ChartData): string {
   const total = data.results.length;
   const currentDuration = Date.now() - data.startTime;
 
-  // Chart height in pixels
-  const maxBarHeight = 80;
-  const secondaryBarHeight = 35;
+  // Chart dimensions
+  const chartWidth = 800;
+  const chartHeight = 120;
+  const padding = { top: 20, right: 20, bottom: 30, left: 50 };
+  const plotWidth = chartWidth - padding.left - padding.right;
+  const plotHeight = chartHeight - padding.top - padding.bottom;
 
-  // Find max values for scaling secondary charts
-  const allDurations = [...summaries.map(s => s.duration || 0), currentDuration];
-  const maxDuration = Math.max(...allDurations);
-  const allFlaky = [...summaries.map(s => s.flaky || 0), currentFlaky];
-  const maxFlaky = Math.max(...allFlaky, 1); // At least 1 to avoid division by zero
-  const allSlow = [...summaries.map(s => s.slow || 0), currentSlow];
-  const maxSlow = Math.max(...allSlow, 1);
+  // Prepare data points including current run
+  const allSummaries = [...summaries, {
+    runId: 'current',
+    timestamp: new Date().toISOString(),
+    total,
+    passed,
+    failed,
+    skipped,
+    flaky: currentFlaky,
+    slow: currentSlow,
+    duration: currentDuration,
+    passRate: total > 0 ? Math.round((passed / total) * 100) : 0
+  }];
 
-  // Generate stacked bars for test status - heights relative to 100% (excluding skipped)
-  const bars = summaries.map((s) => {
-    const nonSkippedTotal = s.passed + s.failed || 1;
-    const passedPct = (s.passed / nonSkippedTotal) * 100;
-    const failedPct = (s.failed / nonSkippedTotal) * 100;
-    const totalHeight = passedPct + failedPct;
-    const scaleFactor = totalHeight > 0 ? maxBarHeight / 100 : 1;
+  // Find max values for scaling
+  const maxTotal = Math.max(...allSummaries.map((s: any) => s.passed + s.failed), 1);
+  const maxDuration = Math.max(...allSummaries.map((s: any) => s.duration || 0), 1);
+  const maxFlaky = Math.max(...allSummaries.map((s: any) => s.flaky || 0), 1);
+  const maxSlow = Math.max(...allSummaries.map((s: any) => s.slow || 0), 1);
 
-    const date = formatShortDate(s.timestamp);
+  // Helper function to generate SVG line chart
+  const generateLineChart = (
+    chartData: any[],
+    getValue: (d: any) => number,
+    maxValue: number,
+    color: string,
+    yAxisLabel: string
+  ): string => {
+    const stepX = plotWidth / (chartData.length - 1);
+
+    // Generate line points
+    const points = chartData.map((d, i) => {
+      const x = padding.left + i * stepX;
+      const value = getValue(d);
+      const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
+      return `${x},${y}`;
+    }).join(' ');
+
+    // Generate data point circles
+    const circles = chartData.map((d, i) => {
+      const x = padding.left + i * stepX;
+      const value = getValue(d);
+      const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
+      const label = i === chartData.length - 1 ? 'Current' : formatShortDate(d.timestamp);
+      const isCurrent = i === chartData.length - 1;
+      return `
+        <circle cx="${x}" cy="${y}" r="${isCurrent ? 5 : 3}" fill="${color}" stroke="var(--bg-primary)" stroke-width="2">
+          <title>${label}: ${value}</title>
+        </circle>
+      `;
+    }).join('');
+
+    // Generate x-axis labels
+    const xLabels = chartData.map((d, i) => {
+      if (i % Math.ceil(chartData.length / 5) !== 0 && i !== chartData.length - 1) return '';
+      const x = padding.left + i * stepX;
+      const label = i === chartData.length - 1 ? 'Now' : formatShortDate(d.timestamp);
+      return `<text x="${x}" y="${chartHeight - 5}" fill="var(--text-muted)" font-size="10" text-anchor="middle">${label}</text>`;
+    }).join('');
+
+    // Generate y-axis labels
+    const yTicks = 4;
+    const yLabels = Array.from({ length: yTicks + 1 }, (_, i) => {
+      const value = Math.round((maxValue / yTicks) * i);
+      const y = padding.top + plotHeight - (i / yTicks) * plotHeight;
+      return `
+        <text x="${padding.left - 5}" y="${y + 4}" fill="var(--text-muted)" font-size="10" text-anchor="end">${value}</text>
+        <line x1="${padding.left}" y1="${y}" x2="${padding.left + plotWidth}" y2="${y}" stroke="var(--border-subtle)" stroke-width="1" opacity="0.3"/>
+      `;
+    }).join('');
+
     return `
-      <div class="trend-bar-wrapper">
-        <div class="trend-stacked-bar" style="height: ${maxBarHeight}px">
-          ${failedPct > 0 ? `<div class="trend-segment failed" style="height: ${failedPct * scaleFactor}px"><span class="trend-segment-label">${s.failed} failed</span></div>` : ''}
-          <div class="trend-segment passed" style="height: ${passedPct * scaleFactor}px"><span class="trend-segment-label">${s.passed} passed</span></div>
-        </div>
-        <span class="trend-label">${date}</span>
-      </div>
+      <svg width="${chartWidth}" height="${chartHeight}" style="overflow: visible;">
+        <!-- Y-axis label -->
+        <text x="10" y="${chartHeight / 2}" fill="var(--text-secondary)" font-size="11" font-weight="600" text-anchor="middle" transform="rotate(-90, 10, ${chartHeight / 2})">${yAxisLabel}</text>
+
+        <!-- Grid lines and y-axis labels -->
+        ${yLabels}
+
+        <!-- Line -->
+        <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+
+        <!-- Data points -->
+        ${circles}
+
+        <!-- X-axis labels -->
+        ${xLabels}
+      </svg>
     `;
-  }).join('');
+  };
 
-  // Add current run stacked bar - heights relative to 100% (excluding skipped)
-  const currentNonSkippedTotal = passed + failed || 1;
-  const currentPassedPct = (passed / currentNonSkippedTotal) * 100;
-  const currentFailedPct = (failed / currentNonSkippedTotal) * 100;
-  const currentScaleFactor = maxBarHeight / 100;
-  const currentBar = `
-    <div class="trend-bar-wrapper current">
-      <div class="trend-stacked-bar" style="height: ${maxBarHeight}px">
-        ${currentFailedPct > 0 ? `<div class="trend-segment failed" style="height: ${currentFailedPct * currentScaleFactor}px"><span class="trend-segment-label">${failed} failed</span></div>` : ''}
-        <div class="trend-segment passed" style="height: ${currentPassedPct * currentScaleFactor}px"><span class="trend-segment-label">${passed} passed</span></div>
-      </div>
-      <span class="trend-label">Current</span>
-    </div>
-  `;
+  // Generate pass rate line chart
+  const passRateChart = generateLineChart(
+    allSummaries,
+    (s: any) => s.passRate || 0,
+    100,
+    'var(--accent-green)',
+    'Pass Rate (%)'
+  );
 
-  // Generate duration trend bars
-  const durationBars = summaries.map((s) => {
-    const duration = s.duration || 0;
-    const barHeight = maxDuration > 0 ? Math.max(4, (duration / maxDuration) * secondaryBarHeight) : 4;
-    return `
-      <div class="secondary-bar-wrapper">
-        <div class="secondary-bar duration" style="height: ${barHeight}px" title="${formatDuration(duration)}"></div>
-        <span class="secondary-value">${formatDuration(duration)}</span>
-      </div>
-    `;
-  }).join('');
+  // Generate duration line chart
+  const durationChart = generateLineChart(
+    allSummaries,
+    (s: any) => Math.round((s.duration || 0) / 1000), // Convert to seconds
+    Math.ceil(maxDuration / 1000),
+    'var(--accent-purple)',
+    'Duration (s)'
+  );
 
-  const currentDurationBarHeight = maxDuration > 0 ? Math.max(4, (currentDuration / maxDuration) * secondaryBarHeight) : 4;
-  const currentDurationBar = `
-    <div class="secondary-bar-wrapper">
-      <div class="secondary-bar duration current" style="height: ${currentDurationBarHeight}px" title="${formatDuration(currentDuration)}"></div>
-      <span class="secondary-value">${formatDuration(currentDuration)}</span>
-    </div>
-  `;
+  // Generate flaky tests line chart
+  const flakyChart = generateLineChart(
+    allSummaries,
+    (s: any) => s.flaky || 0,
+    maxFlaky,
+    'var(--accent-yellow)',
+    'Flaky Tests'
+  );
 
-  // Generate flaky trend bars
-  const flakyBars = summaries.map((s) => {
-    const flakyCount = s.flaky || 0;
-    const barHeight = maxFlaky > 0 ? Math.max(flakyCount > 0 ? 4 : 0, (flakyCount / maxFlaky) * secondaryBarHeight) : 0;
-    return `
-      <div class="secondary-bar-wrapper">
-        <div class="secondary-bar flaky" style="height: ${barHeight}px" title="${flakyCount} flaky"></div>
-        <span class="secondary-value">${flakyCount}</span>
-      </div>
-    `;
-  }).join('');
-
-  const currentFlakyBarHeight = maxFlaky > 0 ? Math.max(currentFlaky > 0 ? 4 : 0, (currentFlaky / maxFlaky) * secondaryBarHeight) : 0;
-  const currentFlakyBar = `
-    <div class="secondary-bar-wrapper">
-      <div class="secondary-bar flaky current" style="height: ${currentFlakyBarHeight}px" title="${currentFlaky} flaky"></div>
-      <span class="secondary-value">${currentFlaky}</span>
-    </div>
-  `;
-
-  // Generate slow trend bars
-  const slowBars = summaries.map((s) => {
-    const slowCount = s.slow || 0;
-    const barHeight = maxSlow > 0 ? Math.max(slowCount > 0 ? 4 : 0, (slowCount / maxSlow) * secondaryBarHeight) : 0;
-    return `
-      <div class="secondary-bar-wrapper">
-        <div class="secondary-bar slow" style="height: ${barHeight}px" title="${slowCount} slow"></div>
-        <span class="secondary-value">${slowCount}</span>
-      </div>
-    `;
-  }).join('');
-
-  const currentSlowBarHeight = maxSlow > 0 ? Math.max(currentSlow > 0 ? 4 : 0, (currentSlow / maxSlow) * secondaryBarHeight) : 0;
-  const currentSlowBar = `
-    <div class="secondary-bar-wrapper">
-      <div class="secondary-bar slow current" style="height: ${currentSlowBarHeight}px" title="${currentSlow} slow"></div>
-      <span class="secondary-value">${currentSlow}</span>
-    </div>
-  `;
+  // Generate slow tests line chart
+  const slowChart = generateLineChart(
+    allSummaries,
+    (s: any) => s.slow || 0,
+    maxSlow,
+    'var(--accent-orange)',
+    'Slow Tests'
+  );
 
   return `
     <div class="trend-section">
       <div class="trend-header">
         <div class="trend-title">📊 Test Run Trends</div>
-        <div class="trend-subtitle">Last ${summaries.length + 1} runs</div>
+        <div class="trend-subtitle">Last ${allSummaries.length} runs</div>
       </div>
-      <div class="trend-chart">
-        ${bars}
-        ${currentBar}
+
+      <!-- Pass Rate Chart -->
+      <div class="line-chart-container">
+        <h4 class="chart-title">✅ Pass Rate Over Time</h4>
+        ${passRateChart}
       </div>
-      <div class="secondary-trends">
-        <div class="secondary-trend-section">
-          <div class="secondary-trend-header">
-            <div class="secondary-trend-title">⏱️ Duration</div>
-          </div>
-          <div class="secondary-trend-chart">
-            ${durationBars}
-            ${currentDurationBar}
-          </div>
+
+      <!-- Secondary Charts Grid -->
+      <div class="secondary-trends-grid">
+        <div class="line-chart-container">
+          <h4 class="chart-title">⏱️ Duration Trend</h4>
+          ${durationChart}
         </div>
-        <div class="secondary-trend-section">
-          <div class="secondary-trend-header">
-            <div class="secondary-trend-title">🔴 Flaky</div>
-          </div>
-          <div class="secondary-trend-chart">
-            ${flakyBars}
-            ${currentFlakyBar}
-          </div>
+        <div class="line-chart-container">
+          <h4 class="chart-title">🟡 Flaky Tests</h4>
+          ${flakyChart}
         </div>
-        <div class="secondary-trend-section">
-          <div class="secondary-trend-header">
-            <div class="secondary-trend-title">🐢 Slow</div>
-          </div>
-          <div class="secondary-trend-chart">
-            ${slowBars}
-            ${currentSlowBar}
-          </div>
+        <div class="line-chart-container">
+          <h4 class="chart-title">🐢 Slow Tests</h4>
+          ${slowChart}
         </div>
       </div>
     </div>
