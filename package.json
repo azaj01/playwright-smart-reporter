@@ -10,9 +10,6 @@
   "files": [
     "dist"
   ],
-  "bin": {
-    "playwright-smart-reporter-merge-history": "./dist/merge-history.js"
-  },
   "scripts": {
     "build": "tsc",
     "test": "playwright test",

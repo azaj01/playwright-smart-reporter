@@ -103,6 +103,8 @@ export interface TestResultData {
   steps: StepData[];
   screenshot?: string;
   videoPath?: string;
+  tracePath?: string;      // NEW: Trace file path
+  traceData?: string;      // NEW: Base64 encoded trace data
   history: TestHistoryEntry[];
 
   // NEW: Enhanced data
