@@ -28,8 +28,8 @@ export function generateTrendChart(data: ChartData): string {
   const total = data.results.length;
   const currentDuration = Date.now() - data.startTime;
 
-  // Chart dimensions
-  const chartWidth = 800;
+  // Chart dimensions - using viewBox for responsive SVG
+  const chartWidth = 400;  // Reduced width for 3-column grid
   const chartHeight = 120;
   const padding = { top: 20, right: 20, bottom: 30, left: 50 };
   const plotWidth = chartWidth - padding.left - padding.right;
@@ -115,7 +115,7 @@ export function generateTrendChart(data: ChartData): string {
     }).join('');
 
     return `
-      <svg width="${chartWidth}" height="${chartHeight}" style="overflow: visible;" class="chart-svg">
+      <svg viewBox="0 0 ${chartWidth} ${chartHeight}" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: auto; overflow: visible;" class="chart-svg">
         <!-- Y-axis label -->
         <text x="12" y="${chartHeight / 2}" fill="var(--text-secondary)" font-size="11" font-weight="600" text-anchor="middle" transform="rotate(-90, 12, ${chartHeight / 2})">${yAxisLabel}</text>
 
