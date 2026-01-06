@@ -72,11 +72,16 @@ function renderList(lines: string[], startIndex: number): { html: string; nextIn
 function renderCodeBlock(code: string, language: string | undefined): string {
   const lang = (language || '').trim();
   const className = lang ? `language-${lang.replace(/[^a-zA-Z0-9_-]/g, '')}` : '';
-  const langBadge = lang ? `<div class="ai-code-lang">${escapeHtml(lang)}</div>` : '';
+  const escapedCode = escapeHtml(code.replace(/\n$/, ''));
+  const codeId = `code-${Math.random().toString(36).substring(2, 9)}`;
+
   return (
     `<div class="ai-code-block">` +
-    langBadge +
-    `<pre><code class="${escapeHtmlAttr(className)}">${escapeHtml(code.replace(/\n$/, ''))}</code></pre>` +
+    `<div class="ai-code-header">` +
+    `<span class="ai-code-lang">${lang ? escapeHtml(lang) : 'code'}</span>` +
+    `<button class="copy-btn" onclick="copyCode('${codeId}', this)">Copy</button>` +
+    `</div>` +
+    `<pre><code id="${codeId}" class="${escapeHtmlAttr(className)}">${escapedCode}</code></pre>` +
     `</div>`
   );
 }

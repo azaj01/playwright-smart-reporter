@@ -186,14 +186,17 @@ export function generateTrendChart(data: ChartData): string {
   );
 
   return `
-    <div class="trend-section">
-      <div class="trend-header">
-        <div class="trend-title">📊 Test Run Trends</div>
+    <div id="trends-section" class="trend-section collapsible-section">
+      <div class="trend-header" onclick="toggleSection('trends-section')">
+        <div style="display: flex; align-items: center;">
+          <div class="trend-title">📊 Test Run Trends</div>
+          <span class="section-toggle">▼</span>
+        </div>
         <div class="trend-subtitle">Last ${allSummaries.length} runs</div>
       </div>
 
       <!-- All Charts in Grid -->
-      <div class="all-charts-grid">
+      <div class="section-content all-charts-grid">
         <div class="line-chart-container">
           <h4 class="chart-title">✅ Pass Rate</h4>
           ${passRateChart}

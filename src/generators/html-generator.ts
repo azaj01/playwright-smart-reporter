@@ -406,6 +406,12 @@ function generateStyles(passRate: number): string {
       justify-content: space-between;
       align-items: center;
       margin-bottom: 1.5rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .trend-header:hover .section-toggle {
+      color: var(--text-primary);
     }
 
     .trend-title {
@@ -421,6 +427,25 @@ function generateStyles(passRate: number): string {
       font-size: 0.75rem;
       color: var(--text-muted);
       font-family: 'JetBrains Mono', monospace;
+    }
+
+    .section-toggle {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      transition: transform 0.2s ease, color 0.2s ease;
+      margin-left: 0.5rem;
+    }
+
+    .collapsible-section.collapsed .section-toggle {
+      transform: rotate(-90deg);
+    }
+
+    .collapsible-section.collapsed .section-content {
+      display: none;
+    }
+
+    .section-content {
+      animation: slideDown 0.2s ease;
     }
 
     .trend-message {
@@ -1070,6 +1095,12 @@ function generateStyles(passRate: number): string {
       background: var(--bg-card-hover);
     }
 
+    .test-card.keyboard-focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 2px rgba(0, 170, 255, 0.3);
+      background: var(--bg-card-hover);
+    }
+
     .test-card-header {
       display: flex;
       align-items: center;
@@ -1361,15 +1392,45 @@ function generateStyles(passRate: number): string {
       border-radius: 10px;
       overflow: hidden;
       background: var(--bg-primary);
+      position: relative;
+    }
+
+    .ai-markdown .ai-code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.45rem 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(0, 0, 0, 0.15);
     }
 
     .ai-markdown .ai-code-lang {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.7rem;
       color: var(--text-muted);
-      padding: 0.45rem 0.75rem;
-      border-bottom: 1px solid var(--border-subtle);
-      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .ai-markdown .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .ai-markdown .copy-btn:hover {
+      background: var(--border-subtle);
+      color: var(--text-primary);
+    }
+
+    .ai-markdown .copy-btn.copied {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+      color: var(--bg-primary);
     }
 
     .ai-markdown pre {
@@ -2216,6 +2277,64 @@ function generateScripts(testsJson: string, includeGallery: boolean, includeComp
       const group = document.getElementById('group-' + groupId);
       group.classList.toggle('collapsed');
     }
+
+    function toggleSection(sectionId) {
+      const section = document.getElementById(sectionId);
+      if (section) {
+        section.classList.toggle('collapsed');
+      }
+    }
+
+    function copyCode(codeId, btn) {
+      const codeEl = document.getElementById(codeId);
+      if (!codeEl) return;
+
+      const text = codeEl.textContent || '';
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      }).catch(() => {
+        btn.textContent = 'Failed';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+      });
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+
+      const cards = Array.from(document.querySelectorAll('.test-card:not([style*="display: none"])'));
+      const focused = document.querySelector('.test-card.keyboard-focus');
+      let currentIndex = focused ? cards.indexOf(focused) : -1;
+
+      if (e.key === 'ArrowDown' || e.key === 'j') {
+        e.preventDefault();
+        if (focused) focused.classList.remove('keyboard-focus');
+        currentIndex = Math.min(currentIndex + 1, cards.length - 1);
+        if (cards[currentIndex]) {
+          cards[currentIndex].classList.add('keyboard-focus');
+          cards[currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      } else if (e.key === 'ArrowUp' || e.key === 'k') {
+        e.preventDefault();
+        if (focused) focused.classList.remove('keyboard-focus');
+        currentIndex = Math.max(currentIndex - 1, 0);
+        if (cards[currentIndex]) {
+          cards[currentIndex].classList.add('keyboard-focus');
+          cards[currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      } else if (e.key === 'Enter' && focused) {
+        e.preventDefault();
+        const header = focused.querySelector('.test-card-header');
+        if (header) header.click();
+      } else if (e.key === 'Escape' && focused) {
+        focused.classList.remove('keyboard-focus');
+      }
+    });
 
     function exportJSON() {
       const data = {
