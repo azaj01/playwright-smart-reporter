@@ -1,15 +1,58 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import type { TestResult } from '@playwright/test/reporter';
 import type { AttachmentData } from '../types';
+
+export interface AttachmentCollectorOptions {
+  cspSafe?: boolean;           // If true, save screenshots as files instead of base64
+  outputDir?: string;          // Directory to save screenshot files (required if cspSafe)
+}
 
 /**
  * Collects and processes test attachments (screenshots, videos, traces)
  */
 export class AttachmentCollector {
+  private options: AttachmentCollectorOptions;
+  private screenshotCounter: number = 0;
+
+  constructor(options: AttachmentCollectorOptions = {}) {
+    this.options = {
+      cspSafe: false,
+      ...options,
+    };
+  }
+
+  /**
+   * Ensure the output directory exists
+   */
+  private ensureOutputDir(): string {
+    if (!this.options.outputDir) {
+      throw new Error('outputDir is required when cspSafe is enabled');
+    }
+    if (!fs.existsSync(this.options.outputDir)) {
+      fs.mkdirSync(this.options.outputDir, { recursive: true });
+    }
+    return this.options.outputDir;
+  }
+
+  /**
+   * Save a screenshot to file and return relative path
+   * Screenshots are saved directly in the output directory (same as HTML) for Jenkins compatibility
+   */
+  private saveScreenshotToFile(buffer: Buffer, contentType: string): string {
+    const outputDir = this.ensureOutputDir();
+    const ext = contentType.includes('png') ? 'png' : 'jpg';
+    const filename = `screenshot-${++this.screenshotCounter}.${ext}`;
+    const filePath = path.join(outputDir, filename);
+    fs.writeFileSync(filePath, buffer);
+    // Return just the filename (same directory as HTML)
+    return filename;
+  }
+
   /**
    * Collect all attachments from a test result
    * @param result - Playwright TestResult
-   * @returns Attachment data with base64 screenshots and file paths
+   * @returns Attachment data with base64 screenshots (or file paths if cspSafe) and file paths
    */
   collectAttachments(result: TestResult): AttachmentData {
     const attachments: AttachmentData = {
@@ -25,14 +68,25 @@ export class AttachmentCollector {
 
     for (const screenshot of screenshots) {
       if (screenshot.body) {
-        const dataUri = `data:${screenshot.contentType};base64,${screenshot.body.toString('base64')}`;
-        attachments.screenshots.push(dataUri);
+        if (this.options.cspSafe) {
+          // Save to file instead of base64
+          const relativePath = this.saveScreenshotToFile(screenshot.body, screenshot.contentType);
+          attachments.screenshots.push(relativePath);
+        } else {
+          const dataUri = `data:${screenshot.contentType};base64,${screenshot.body.toString('base64')}`;
+          attachments.screenshots.push(dataUri);
+        }
       } else if (screenshot.path) {
-        // Read file and convert to base64
         try {
           const imgBuffer = fs.readFileSync(screenshot.path);
-          const dataUri = `data:${screenshot.contentType};base64,${imgBuffer.toString('base64')}`;
-          attachments.screenshots.push(dataUri);
+          if (this.options.cspSafe) {
+            // Save to file instead of base64
+            const relativePath = this.saveScreenshotToFile(imgBuffer, screenshot.contentType);
+            attachments.screenshots.push(relativePath);
+          } else {
+            const dataUri = `data:${screenshot.contentType};base64,${imgBuffer.toString('base64')}`;
+            attachments.screenshots.push(dataUri);
+          }
         } catch (err) {
           console.warn(`Failed to read screenshot: ${screenshot.path}`, err);
         }

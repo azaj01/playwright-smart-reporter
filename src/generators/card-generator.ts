@@ -160,7 +160,11 @@ export function generateTestDetails(test: TestResultData, cardId: string): strin
       <div class="detail-section">
         <div class="detail-label"><span class="icon">📸</span> Screenshot</div>
         <div class="screenshot-box">
-          <img src="${test.screenshot}" alt="Failure screenshot" onclick="window.open(this.src, '_blank')"/>
+          <img src="${test.screenshot}" alt="Failure screenshot" onclick="window.open(this.src, '_blank')" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
+          <div class="screenshot-fallback" style="display:none;">
+            <span>Image blocked by security policy</span>
+            <a href="${test.screenshot}" download class="download-btn">Download Screenshot</a>
+          </div>
         </div>
       </div>
     `;

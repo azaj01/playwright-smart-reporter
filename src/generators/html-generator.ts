@@ -47,23 +47,32 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const gradeD = results.filter((r) => r.stabilityScore && r.stabilityScore.grade === 'D').length;
   const gradeF = results.filter((r) => r.stabilityScore && r.stabilityScore.grade === 'F').length;
 
-  const testsJson = JSON.stringify(results);
+  // Escape JSON for safe embedding in HTML <script> tags
+  // This prevents </script> or <!-- in error messages from breaking the page
+  const testsJson = JSON.stringify(results)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
 
   // Feature flags
   const showGallery = options.enableGalleryView !== false;
   const showComparison = (options.enableComparison !== false && !!comparison);
+  const cspSafe = options.cspSafe === true;
+
+  // Google Fonts links (only included when not in CSP-safe mode)
+  const fontLinks = cspSafe ? '' : `
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">`;
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Test Report</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Smart Test Report</title>${fontLinks}
   <style>
-${generateStyles(passRate)}
+${generateStyles(passRate, cspSafe)}
   </style>
 </head>
 <body>
@@ -178,7 +187,15 @@ ${generateScripts(testsJson, showGallery, showComparison)}
 /**
  * Generate all CSS styles
  */
-function generateStyles(passRate: number): string {
+function generateStyles(passRate: number, cspSafe: boolean = false): string {
+  // Font families - use system fonts in CSP-safe mode
+  const primaryFont = cspSafe
+    ? "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    : "'Space Grotesk', system-ui, sans-serif";
+  const monoFont = cspSafe
+    ? "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
+    : "${monoFont}";
+
   return `    :root {
       --bg-primary: #0a0a0f;
       --bg-secondary: #12121a;
@@ -204,7 +221,7 @@ function generateStyles(passRate: number): string {
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Space Grotesk', system-ui, sans-serif;
+      font-family: ${primaryFont};
       background: var(--bg-primary);
       color: var(--text-primary);
       min-height: 100vh;
@@ -264,11 +281,11 @@ function generateStyles(passRate: number): string {
     .logo-text span {
       font-size: 0.875rem;
       color: var(--text-secondary);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
     }
 
     .timestamp {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.875rem;
       color: var(--text-muted);
       background: var(--bg-secondary);
@@ -322,7 +339,7 @@ function generateStyles(passRate: number): string {
     }
 
     .stat-value {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 2rem;
       font-weight: 700;
       color: var(--stat-color);
@@ -377,7 +394,7 @@ function generateStyles(passRate: number): string {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 1.5rem;
       font-weight: 700;
       color: var(--accent-green);
@@ -430,7 +447,7 @@ function generateStyles(passRate: number): string {
     .trend-subtitle {
       font-size: 0.75rem;
       color: var(--text-muted);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
     }
 
     .section-toggle {
@@ -469,7 +486,7 @@ function generateStyles(passRate: number): string {
       background: var(--bg-secondary);
       padding: 0.2rem 0.4rem;
       border-radius: 4px;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.85em;
     }
 
@@ -553,7 +570,7 @@ function generateStyles(passRate: number): string {
     }
 
     .trend-label {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.65rem;
       color: var(--text-muted);
       white-space: nowrap;
@@ -583,7 +600,7 @@ function generateStyles(passRate: number): string {
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.65rem;
       font-weight: 600;
       color: var(--bg-primary);
@@ -866,7 +883,7 @@ function generateStyles(passRate: number): string {
     }
 
     .secondary-value {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.6rem;
       color: var(--text-muted);
       margin-top: 4px;
@@ -974,7 +991,7 @@ function generateStyles(passRate: number): string {
     }
 
     .history-stat {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.7rem;
       color: var(--text-muted);
     }
@@ -996,7 +1013,7 @@ function generateStyles(passRate: number): string {
     }
 
     .filter-btn {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.8rem;
       padding: 0.5rem 1rem;
       border-radius: 8px;
@@ -1068,7 +1085,7 @@ function generateStyles(passRate: number): string {
       border: 1px solid var(--border-subtle);
       border-radius: 8px;
       color: var(--text-primary);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.9rem;
       transition: all 0.2s;
     }
@@ -1168,7 +1185,7 @@ function generateStyles(passRate: number): string {
     }
 
     .test-file {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.75rem;
       color: var(--text-muted);
     }
@@ -1181,13 +1198,13 @@ function generateStyles(passRate: number): string {
     }
 
     .test-duration {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.875rem;
       color: var(--text-secondary);
     }
 
     .badge {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.7rem;
       padding: 0.25rem 0.5rem;
       border-radius: 6px;
@@ -1248,7 +1265,7 @@ function generateStyles(passRate: number): string {
     }
 
     .trend {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.75rem;
     }
 
@@ -1308,7 +1325,7 @@ function generateStyles(passRate: number): string {
     }
 
     .error-box {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.8rem;
       background: rgba(255, 68, 102, 0.1);
       border: 1px solid var(--accent-red-dim);
@@ -1321,7 +1338,7 @@ function generateStyles(passRate: number): string {
     }
 
     .stack-box {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.75rem;
       background: var(--bg-primary);
       border: 1px solid var(--border-subtle);
@@ -1380,7 +1397,7 @@ function generateStyles(passRate: number): string {
     .ai-markdown .ai-list li { margin: 0.15rem 0; }
 
     .ai-markdown .ai-inline-code {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.85em;
       background: rgba(0, 0, 0, 0.25);
       border: 1px solid var(--border-subtle);
@@ -1409,7 +1426,7 @@ function generateStyles(passRate: number): string {
     }
 
     .ai-markdown .ai-code-lang {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.7rem;
       color: var(--text-muted);
     }
@@ -1423,7 +1440,7 @@ function generateStyles(passRate: number): string {
       border-radius: 4px;
       cursor: pointer;
       transition: all 0.2s ease;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
     }
 
     .ai-markdown .copy-btn:hover {
@@ -1444,7 +1461,7 @@ function generateStyles(passRate: number): string {
     }
 
     .ai-markdown pre code {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.8rem;
       color: var(--text-secondary);
       white-space: pre;
@@ -1452,7 +1469,7 @@ function generateStyles(passRate: number): string {
     }
 
     .duration-compare {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.8rem;
       color: var(--text-muted);
     }
@@ -1499,7 +1516,7 @@ function generateStyles(passRate: number): string {
     }
 
     .step-title {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.75rem;
       color: var(--text-secondary);
       min-width: 0;
@@ -1514,7 +1531,7 @@ function generateStyles(passRate: number): string {
     }
 
     .step-duration {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.75rem;
       color: var(--text-muted);
       min-width: 60px;
@@ -1568,7 +1585,7 @@ function generateStyles(passRate: number): string {
     }
 
     .file-group-name {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.9rem;
       color: var(--text-primary);
       flex: 1;
@@ -1583,7 +1600,7 @@ function generateStyles(passRate: number): string {
     .file-group-stat {
       padding: 0.2rem 0.5rem;
       border-radius: 4px;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
     }
 
     .file-group-stat.passed { color: var(--accent-green); background: rgba(0, 255, 136, 0.1); }
@@ -1620,6 +1637,72 @@ function generateStyles(passRate: number): string {
       transform: scale(1.02);
     }
 
+    /* Screenshot fallback for CSP-blocked images */
+    .screenshot-fallback {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 2rem;
+      background: var(--bg-secondary);
+      border: 2px dashed var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .download-btn:hover {
+      background: #0095e0;
+    }
+
+    /* Gallery fallback for CSP-blocked images */
+    .gallery-fallback {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
+      height: 100%;
+      min-height: 120px;
+      background: var(--bg-secondary);
+      border: 2px dashed var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+    }
+
+    .download-btn-small {
+      padding: 0.3rem 0.6rem;
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      text-decoration: none;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+
+    .download-btn-small:hover {
+      background: #0095e0;
+    }
+
     .attachments {
       display: flex;
       gap: 0.75rem;
@@ -1636,7 +1719,7 @@ function generateStyles(passRate: number): string {
       border-radius: 6px;
       color: var(--accent-blue);
       text-decoration: none;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.8rem;
       transition: all 0.2s;
     }
@@ -1655,7 +1738,7 @@ function generateStyles(passRate: number): string {
       border: 1px solid var(--border-subtle);
       border-radius: 8px;
       color: var(--text-secondary);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.8rem;
       cursor: pointer;
       transition: all 0.2s;
@@ -1698,7 +1781,7 @@ function generateStyles(passRate: number): string {
     }
 
     .gallery-filter-btn {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.75rem;
       padding: 0.4rem 0.8rem;
       border-radius: 6px;
@@ -1796,7 +1879,7 @@ function generateStyles(passRate: number): string {
     }
 
     .gallery-item-status {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.65rem;
       padding: 0.2rem 0.4rem;
       border-radius: 4px;
@@ -1848,7 +1931,7 @@ function generateStyles(passRate: number): string {
     }
 
     .trace-file-type {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.8rem;
       color: var(--accent-blue);
       background: rgba(59, 130, 246, 0.1);
@@ -1934,7 +2017,7 @@ function generateStyles(passRate: number): string {
     }
 
     .lightbox-status {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.875rem;
       padding: 0.25rem 0.75rem;
       border-radius: 6px;
@@ -1987,7 +2070,7 @@ function generateStyles(passRate: number): string {
     .comparison-subtitle {
       font-size: 0.75rem;
       color: var(--text-muted);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
     }
 
     .comparison-summary {
@@ -2014,7 +2097,7 @@ function generateStyles(passRate: number): string {
     }
 
     .comparison-card-value {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 1.5rem;
       font-weight: 700;
       color: var(--text-primary);
@@ -2092,7 +2175,7 @@ function generateStyles(passRate: number): string {
     }
 
     .comparison-section-count {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.75rem;
       padding: 0.2rem 0.6rem;
       background: var(--bg-primary);
@@ -2156,13 +2239,13 @@ function generateStyles(passRate: number): string {
     }
 
     .comparison-item-file {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.7rem;
       color: var(--text-muted);
     }
 
     .comparison-item-duration-badge {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.7rem;
       padding: 0.25rem 0.5rem;
       background: var(--bg-secondary);
@@ -2175,7 +2258,7 @@ function generateStyles(passRate: number): string {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.75rem;
     }
 
@@ -2201,7 +2284,7 @@ function generateStyles(passRate: number): string {
 
     .comparison-item-error {
       margin-top: 0.5rem;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ${monoFont};
       font-size: 0.7rem;
       color: var(--accent-red);
       background: rgba(255, 68, 102, 0.1);

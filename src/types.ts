@@ -28,6 +28,9 @@ export interface SmartReporterOptions {
 
   // NEW: Comparison
   baselineRunId?: string;          // Compare against specific run
+
+  // CSP Compliance - Use system fonts and avoid base64 data URIs
+  cspSafe?: boolean;               // Default: false (for backwards compatibility)
 }
 
 // ============================================================================

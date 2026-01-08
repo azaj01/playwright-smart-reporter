@@ -102,7 +102,7 @@ class SmartReporter implements Reporter {
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
 
-    // Initialize collectors
+    // Initialize collectors (attachment collector will be re-initialized in onBegin with outputDir)
     this.stepCollector = new StepCollector();
     this.attachmentCollector = new AttachmentCollector();
 
@@ -125,6 +125,14 @@ class SmartReporter implements Reporter {
     // Initialize HistoryCollector and load history
     this.historyCollector = new HistoryCollector(this.options, this.outputDir);
     this.historyCollector.loadHistory();
+
+    // Re-initialize attachment collector with output directory for CSP-safe mode
+    const outputPath = path.resolve(this.outputDir, this.options.outputFile ?? 'smart-report.html');
+    const outputDir = path.dirname(outputPath);
+    this.attachmentCollector = new AttachmentCollector({
+      cspSafe: this.options.cspSafe,
+      outputDir: outputDir,
+    });
 
     // Initialize all analyzers with thresholds from options
     const performanceThreshold = this.options.performanceThreshold ?? 0.2;
@@ -217,12 +225,14 @@ class SmartReporter implements Reporter {
     );
     if (traceAttachment?.path) {
       testData.tracePath = traceAttachment.path;
-      // Embed trace as base64 for one-click viewing
-      try {
-        const traceBuffer = fs.readFileSync(traceAttachment.path);
-        testData.traceData = `data:application/zip;base64,${traceBuffer.toString('base64')}`;
-      } catch {
-        // If we can't read the trace, just use the path
+      // Embed trace as base64 for one-click viewing (skip in CSP-safe mode)
+      if (!this.options.cspSafe) {
+        try {
+          const traceBuffer = fs.readFileSync(traceAttachment.path);
+          testData.traceData = `data:application/zip;base64,${traceBuffer.toString('base64')}`;
+        } catch {
+          // If we can't read the trace, just use the path
+        }
       }
     }
 

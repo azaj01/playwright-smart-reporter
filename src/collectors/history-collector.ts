@@ -28,6 +28,7 @@ export class HistoryCollector {
       enableTrendsView: options.enableTrendsView ?? true,
       stabilityThreshold: options.stabilityThreshold ?? 70,
       retryFailureThreshold: options.retryFailureThreshold ?? 3,
+      cspSafe: options.cspSafe ?? false,
       slackWebhook: options.slackWebhook,
       teamsWebhook: options.teamsWebhook,
       baselineRunId: options.baselineRunId,

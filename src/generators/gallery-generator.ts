@@ -80,7 +80,12 @@ function generateGalleryItem(item: GalleryItem): string {
     return `
       <div class="gallery-item" data-type="screenshots" data-id="${itemId}" onclick="openLightbox('${itemId}')">
         <div class="gallery-item-preview">
-          <img src="${item.dataUri}" alt="${escapeHtml(item.testTitle)}" loading="lazy"/>
+          <img src="${item.dataUri}" alt="${escapeHtml(item.testTitle)}" loading="lazy" onerror="this.style.display='none'; var fb=this.nextElementSibling; fb.style.display='flex'; fb.nextElementSibling.style.display='none';"/>
+          <div class="gallery-fallback" style="display:none;">
+            <span class="gallery-item-icon">📸</span>
+            <span>Blocked</span>
+            <a href="${item.dataUri}" download class="download-btn-small" onclick="event.stopPropagation();">Download</a>
+          </div>
           <div class="gallery-item-overlay">
             <span class="gallery-item-icon">📸</span>
           </div>
@@ -243,8 +248,8 @@ export function generateGalleryScript(): string {
       const title = document.getElementById('lightbox-title');
       const status = document.getElementById('lightbox-status');
 
-      // Build array of all visible gallery items (screenshots and traces)
-      lightboxItems = Array.from(document.querySelectorAll('.gallery-item'))
+      // Build array of only screenshot items (exclude videos and traces from lightbox navigation)
+      lightboxItems = Array.from(document.querySelectorAll('.gallery-item[data-type="screenshots"]'))
         .filter(item => item.style.display !== 'none');
 
       currentLightboxIndex = lightboxItems.findIndex(item => item.dataset.id === itemId);
