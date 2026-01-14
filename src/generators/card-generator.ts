@@ -8,7 +8,7 @@ import { formatDuration, escapeHtml, sanitizeId, renderMarkdownLite } from '../u
 /**
  * Generate a single test card
  */
-export function generateTestCard(test: TestResultData): string {
+export function generateTestCard(test: TestResultData, showTraceSection: boolean): string {
   const isFlaky = test.flakinessScore !== undefined && test.flakinessScore >= 0.3;
   const isUnstable = test.flakinessScore !== undefined && test.flakinessScore >= 0.1 && test.flakinessScore < 0.3;
   const isSlow = test.performanceTrend?.startsWith('↑') || false;
@@ -61,7 +61,7 @@ export function generateTestCard(test: TestResultData): string {
           ${hasDetails ? `<span class="expand-icon">▶</span>` : ''}
         </div>
       </div>
-      ${hasDetails ? generateTestDetails(test, cardId) : ''}
+      ${hasDetails ? generateTestDetails(test, cardId, showTraceSection) : ''}
     </div>
   `;
 }
@@ -69,7 +69,7 @@ export function generateTestCard(test: TestResultData): string {
 /**
  * Generate test details section (history, steps, errors, AI suggestions)
  */
-export function generateTestDetails(test: TestResultData, cardId: string): string {
+export function generateTestDetails(test: TestResultData, cardId: string, showTraceSection: boolean): string {
   let historyDetails = '';
   let bodyDetails = '';
 
@@ -165,6 +165,41 @@ export function generateTestDetails(test: TestResultData, cardId: string): strin
     `;
   }
 
+  const tracePaths = test.attachments?.traces?.length
+    ? test.attachments.traces
+    : (test.tracePath ? [test.tracePath] : []);
+  const showTraceViewer = showTraceSection && test.status !== 'passed' && tracePaths.length > 0;
+  if (showTraceViewer) {
+    bodyDetails += `
+      <div class="detail-section">
+        <div class="detail-label"><span class="icon">📊</span> Trace</div>
+        <div class="trace-list">
+          ${tracePaths.map((trace, idx) => {
+            const suffix = tracePaths.length > 1 ? ` #${idx + 1}` : '';
+            const safeTrace = escapeHtml(trace);
+            const fileName = escapeHtml(trace.split(/[\\\\/]/).pop() || trace);
+
+            return `
+              <div class="trace-row">
+                <div class="trace-meta">
+                  <div class="trace-file">
+                    <span class="trace-file-icon">📦</span>
+                    <span class="trace-file-name" title="${safeTrace}">${fileName}${suffix}</span>
+                  </div>
+                  <div class="trace-path" title="${safeTrace}">${safeTrace}</div>
+                </div>
+                <div class="trace-actions">
+                  <a href="${safeTrace}" class="attachment-link" download>⬇ Download</a>
+                  <a href="#" class="attachment-link" data-trace="${safeTrace}" onclick="return viewTraceFromEl(this)">🔍 View</a>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   if (test.screenshot) {
     bodyDetails += `
       <div class="detail-section">
@@ -220,7 +255,7 @@ function formatHistoryTimestamp(timestamp: string): string {
 /**
  * Generate grouped tests by file
  */
-export function generateGroupedTests(results: TestResultData[]): string {
+export function generateGroupedTests(results: TestResultData[], showTraceSection: boolean): string {
   // Group tests by file
   const groups = new Map<string, TestResultData[]>();
   for (const test of results) {
@@ -247,7 +282,7 @@ export function generateGroupedTests(results: TestResultData[]): string {
         </div>
       </div>
       <div class="file-group-content">
-        ${tests.map(test => generateTestCard(test)).join('\n')}
+        ${tests.map(test => generateTestCard(test, showTraceSection)).join('\n')}
       </div>
     </div>
   `;

@@ -59,6 +59,8 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const showGallery = options.enableGalleryView !== false;
   const showComparison = (options.enableComparison !== false && !!comparison);
   const cspSafe = options.cspSafe === true;
+  const enableTraceViewer = options.enableTraceViewer !== false;
+  const showTraceSection = enableTraceViewer;
   const enableHistoryDrilldown = options.enableHistoryDrilldown === true;
   const historyRunSnapshotsJson = enableHistoryDrilldown
     ? JSON.stringify(historyRunSnapshots || {})
@@ -181,12 +183,12 @@ ${generateStyles(passRate, cspSafe)}
 
     <!-- Test List -->
     <div class="test-list">
-      ${generateGroupedTests(results)}
+      ${generateGroupedTests(results, showTraceSection)}
     </div>
   </div>
 
   <script>
-${generateScripts(testsJson, showGallery, showComparison, enableHistoryDrilldown, historyRunSnapshotsJson)}
+${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, enableHistoryDrilldown, historyRunSnapshotsJson)}
   </script>
 </body>
 </html>`;
@@ -1789,6 +1791,63 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       margin-top: 0.5rem;
     }
 
+    .trace-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .trace-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.75rem;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      background: var(--bg-primary);
+    }
+
+    .trace-meta {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .trace-file {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-width: 0;
+    }
+
+    .trace-file-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .trace-path {
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .trace-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-shrink: 0;
+      padding-top: 0.1rem;
+    }
+
     .attachment-link {
       display: inline-flex;
       align-items: center;
@@ -2382,10 +2441,12 @@ function generateScripts(
   testsJson: string,
   includeGallery: boolean,
   includeComparison: boolean,
+  enableTraceViewer: boolean,
   enableHistoryDrilldown: boolean,
   historyRunSnapshotsJson: string
 ): string {
   return `    const tests = ${testsJson};
+    const traceViewerEnabled = ${enableTraceViewer ? 'true' : 'false'};
     const historyDrilldownEnabled = ${enableHistoryDrilldown ? 'true' : 'false'};
     const historyRunSnapshots = ${historyRunSnapshotsJson};
     const detailsBodyCache = new WeakMap();
@@ -2790,8 +2851,47 @@ function generateScripts(
 	    }
 
     // Run on page load
-    window.addEventListener('DOMContentLoaded', scrollChartsToRight);
-    window.addEventListener('DOMContentLoaded', initHistoryDrilldown);
+    window.addEventListener('DOMContentLoaded', () => {
+      scrollChartsToRight();
+      initHistoryDrilldown();
+      if (!traceViewerEnabled) {
+        document.querySelectorAll('[data-trace]').forEach(el => {
+          el.style.display = 'none';
+        });
+      }
+    });
+
+    function viewTraceFromEl(el) {
+      const tracePath = el?.dataset?.trace;
+      return viewTrace(tracePath);
+    }
+
+    function viewTrace(tracePath) {
+      if (!tracePath) return false;
+
+      if (!traceViewerEnabled) {
+        alert('Trace Viewer is disabled by reporter configuration (enableTraceViewer: false).');
+        return false;
+      }
+
+      if (window.location.protocol === 'file:') {
+        const reportFilePath = decodeURIComponent(window.location.pathname || '').replace(/\\+/g, '/');
+        const reportDirPath = reportFilePath.substring(0, reportFilePath.lastIndexOf('/')) || '.';
+        const cmd =
+          'npx playwright-smart-reporter-view-trace ' +
+          JSON.stringify(tracePath) +
+          ' --dir ' +
+          JSON.stringify(reportDirPath);
+        window.prompt('To view this trace, run:', cmd);
+        return false;
+      }
+
+      window.prompt(
+        'To view this trace, run from the report folder:',
+        'npx playwright-smart-reporter-view-trace ' + JSON.stringify(tracePath)
+      );
+      return false;
+    }
 
 ${includeGallery ? `    // Gallery functions\n${generateGalleryScript()}` : ''}
 

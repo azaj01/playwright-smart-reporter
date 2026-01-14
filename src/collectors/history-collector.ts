@@ -28,6 +28,7 @@ export class HistoryCollector {
       enableAIRecommendations: options.enableAIRecommendations ?? true,
       enableTrendsView: options.enableTrendsView ?? true,
       enableHistoryDrilldown: options.enableHistoryDrilldown ?? false,
+      enableTraceViewer: options.enableTraceViewer ?? true,
       stabilityThreshold: options.stabilityThreshold ?? 70,
       retryFailureThreshold: options.retryFailureThreshold ?? 3,
       cspSafe: options.cspSafe ?? false,

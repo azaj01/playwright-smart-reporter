@@ -22,6 +22,7 @@ export interface SmartReporterOptions {
   enableAIRecommendations?: boolean;
   enableTrendsView?: boolean;
   enableHistoryDrilldown?: boolean; // Default: false (stores per-run snapshots for dot-click drilldown)
+  enableTraceViewer?: boolean; // Enable "View trace" links
 
   // NEW: Thresholds
   stabilityThreshold?: number;     // Default: 70 (warn below this)
