@@ -80,9 +80,12 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
       stabilityBadge = `<span class="stability-badge ${gradeClass}">${grade}</span>`;
     }
 
+    const statusLabel = test.status === 'passed' ? 'Passed' : test.status === 'skipped' ? 'Skipped' : 'Failed';
     return `
-      <div class="test-list-item ${statusClass}" 
+      <div class="test-list-item ${statusClass}"
            id="list-item-${cardId}"
+           role="listitem"
+           aria-label="${escapeHtml(test.title)} - ${statusLabel}"
            data-testid="${escapeHtml(test.testId)}"
            data-status="${test.status}"
            data-flaky="${isFlaky}"
@@ -93,8 +96,10 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
            data-fixed="${isFixed}"
            data-file="${escapeHtml(test.file)}"
            data-grade="${test.stabilityScore?.grade || ''}"
-           onclick="selectTest('${cardId}')">
-        <div class="test-item-status">
+           onclick="selectTest('${cardId}')"
+           tabindex="0"
+           onkeydown="if(event.key==='Enter')selectTest('${cardId}')">
+        <div class="test-item-status" aria-hidden="true">
           <div class="status-dot ${statusClass}"></div>
         </div>
         <div class="test-item-info">
@@ -466,8 +471,8 @@ ${generateStyles(passRate, cspSafe)}
     <!-- Top Bar -->
     <header class="top-bar">
       <div class="top-bar-left">
-        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar (⌘B)">
-          <span class="hamburger-icon">☰</span>
+        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar (⌘B)" aria-label="Toggle sidebar navigation" aria-expanded="true" aria-controls="sidebar">
+          <span class="hamburger-icon" aria-hidden="true">☰</span>
         </button>
         <div class="logo">
           <div class="logo-icon">S</div>
@@ -546,88 +551,90 @@ ${generateStyles(passRate, cspSafe)}
       </div>
 
       <!-- Quick Stats -->
-      <div class="sidebar-stats">
-        <div class="mini-stat passed" onclick="filterTests('passed')" title="Passed tests">
+      <div class="sidebar-stats" role="group" aria-label="Test statistics">
+        <button class="mini-stat passed" onclick="filterTests('passed')" title="Passed tests" aria-label="${passed} passed tests - click to filter">
           <span class="mini-stat-value">${passed}</span>
           <span class="mini-stat-label">Passed</span>
-        </div>
-        <div class="mini-stat failed" onclick="filterTests('failed')" title="Failed tests">
+        </button>
+        <button class="mini-stat failed" onclick="filterTests('failed')" title="Failed tests" aria-label="${failed} failed tests - click to filter">
           <span class="mini-stat-value">${failed}</span>
           <span class="mini-stat-label">Failed</span>
-        </div>
-        <div class="mini-stat flaky" onclick="filterTests('flaky')" title="Flaky tests">
+        </button>
+        <button class="mini-stat flaky" onclick="filterTests('flaky')" title="Flaky tests" aria-label="${flaky} flaky tests - click to filter">
           <span class="mini-stat-value">${flaky}</span>
           <span class="mini-stat-label">Flaky</span>
-        </div>
+        </button>
       </div>
 
       <!-- Navigation -->
-      <nav class="sidebar-nav">
-        <div class="nav-section-title">Navigation</div>
-        <a class="nav-item active" data-view="overview" onclick="switchView('overview')">
-          <span class="nav-icon">📊</span>
-          <span class="nav-label">Overview</span>
-        </a>
-        <a class="nav-item" data-view="tests" onclick="switchView('tests')">
-          <span class="nav-icon">🧪</span>
-          <span class="nav-label">Tests</span>
-          <span class="nav-badge">${total}</span>
-        </a>
-        <a class="nav-item" data-view="trends" onclick="switchView('trends')">
-          <span class="nav-icon">📈</span>
-          <span class="nav-label">Trends</span>
-        </a>
-        ${showComparison ? `
-        <a class="nav-item" data-view="comparison" onclick="switchView('comparison')">
-          <span class="nav-icon">⚖️</span>
-          <span class="nav-label">Comparison</span>
-        </a>
-        ` : ''}
-        ${showGallery ? `
-        <a class="nav-item" data-view="gallery" onclick="switchView('gallery')">
-          <span class="nav-icon">🖼️</span>
-          <span class="nav-label">Gallery</span>
-        </a>
-        ` : ''}
+      <nav class="sidebar-nav" aria-label="Main navigation">
+        <div class="nav-section-title" id="nav-section-label">Navigation</div>
+        <div role="tablist" aria-labelledby="nav-section-label">
+          <button class="nav-item active" data-view="overview" onclick="switchView('overview')" role="tab" aria-selected="true" aria-controls="view-overview">
+            <span class="nav-icon" aria-hidden="true">📊</span>
+            <span class="nav-label">Overview</span>
+          </button>
+          <button class="nav-item" data-view="tests" onclick="switchView('tests')" role="tab" aria-selected="false" aria-controls="view-tests">
+            <span class="nav-icon" aria-hidden="true">🧪</span>
+            <span class="nav-label">Tests</span>
+            <span class="nav-badge" aria-label="${total} total tests">${total}</span>
+          </button>
+          <button class="nav-item" data-view="trends" onclick="switchView('trends')" role="tab" aria-selected="false" aria-controls="view-trends">
+            <span class="nav-icon" aria-hidden="true">📈</span>
+            <span class="nav-label">Trends</span>
+          </button>
+          ${showComparison ? `
+          <button class="nav-item" data-view="comparison" onclick="switchView('comparison')" role="tab" aria-selected="false" aria-controls="view-comparison">
+            <span class="nav-icon" aria-hidden="true">⚖️</span>
+            <span class="nav-label">Comparison</span>
+          </button>
+          ` : ''}
+          ${showGallery ? `
+          <button class="nav-item" data-view="gallery" onclick="switchView('gallery')" role="tab" aria-selected="false" aria-controls="view-gallery">
+            <span class="nav-icon" aria-hidden="true">🖼️</span>
+            <span class="nav-label">Gallery</span>
+          </button>
+          ` : ''}
+        </div>
       </nav>
 
       <!-- Filters -->
-      <div class="sidebar-filters">
-        <div class="nav-section-title">Filters <button class="clear-filters-btn" onclick="clearAllFilters()" title="Clear all filters">✕</button></div>
+      <div class="sidebar-filters" role="region" aria-label="Test filters">
+        <div class="nav-section-title">Filters <button class="clear-filters-btn" onclick="clearAllFilters()" title="Clear all filters" aria-label="Clear all filters">✕</button></div>
         ${hasAttention ? `
-        <div class="filter-group" data-group="attention">
-          <div class="filter-group-title">Attention</div>
-          <div class="filter-chips attention-chips">
-            ${newFailuresCount > 0 ? `<button class="filter-chip attention-new-failure" data-filter="new-failure" data-group="attention" onclick="toggleFilter(this)">New Failure (${newFailuresCount})</button>` : ''}
-            ${regressionsCount > 0 ? `<button class="filter-chip attention-regression" data-filter="regression" data-group="attention" onclick="toggleFilter(this)">Regression (${regressionsCount})</button>` : ''}
-            ${fixedCount > 0 ? `<button class="filter-chip attention-fixed" data-filter="fixed" data-group="attention" onclick="toggleFilter(this)">Fixed (${fixedCount})</button>` : ''}
+        <div class="filter-group" data-group="attention" role="group" aria-label="Attention filters">
+          <div class="filter-group-title" id="attention-filter-label">Attention</div>
+          <div class="filter-chips attention-chips" role="group" aria-labelledby="attention-filter-label">
+            ${newFailuresCount > 0 ? `<button class="filter-chip attention-new-failure" data-filter="new-failure" data-group="attention" onclick="toggleFilter(this)" aria-pressed="false">New Failure (${newFailuresCount})</button>` : ''}
+            ${regressionsCount > 0 ? `<button class="filter-chip attention-regression" data-filter="regression" data-group="attention" onclick="toggleFilter(this)" aria-pressed="false">Regression (${regressionsCount})</button>` : ''}
+            ${fixedCount > 0 ? `<button class="filter-chip attention-fixed" data-filter="fixed" data-group="attention" onclick="toggleFilter(this)" aria-pressed="false">Fixed (${fixedCount})</button>` : ''}
           </div>
         </div>
         ` : ''}
-        <div class="filter-group" data-group="status">
-          <div class="filter-group-title">Status</div>
-          <div class="filter-chips">
-            <button class="filter-chip" data-filter="passed" data-group="status" onclick="toggleFilter(this)">Passed</button>
-            <button class="filter-chip" data-filter="failed" data-group="status" onclick="toggleFilter(this)">Failed</button>
-            <button class="filter-chip" data-filter="skipped" data-group="status" onclick="toggleFilter(this)">Skipped</button>
+        <div class="filter-group" data-group="status" role="group" aria-label="Status filters">
+          <div class="filter-group-title" id="status-filter-label">Status</div>
+          <div class="filter-chips" role="group" aria-labelledby="status-filter-label">
+            <button class="filter-chip" data-filter="passed" data-group="status" onclick="toggleFilter(this)" aria-pressed="false">Passed</button>
+            <button class="filter-chip" data-filter="failed" data-group="status" onclick="toggleFilter(this)" aria-pressed="false">Failed</button>
+            <button class="filter-chip" data-filter="skipped" data-group="status" onclick="toggleFilter(this)" aria-pressed="false">Skipped</button>
           </div>
         </div>
-        <div class="filter-group" data-group="health">
-          <div class="filter-group-title">Health</div>
-          <div class="filter-chips">
-            <button class="filter-chip" data-filter="flaky" data-group="health" onclick="toggleFilter(this)">Flaky (${flaky})</button>
-            <button class="filter-chip" data-filter="slow" data-group="health" onclick="toggleFilter(this)">Slow (${slow})</button>
-            <button class="filter-chip" data-filter="new" data-group="health" onclick="toggleFilter(this)">New (${newTests})</button>
+        <div class="filter-group" data-group="health" role="group" aria-label="Health filters">
+          <div class="filter-group-title" id="health-filter-label">Health</div>
+          <div class="filter-chips" role="group" aria-labelledby="health-filter-label">
+            <button class="filter-chip" data-filter="flaky" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">Flaky (${flaky})</button>
+            <button class="filter-chip" data-filter="slow" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">Slow (${slow})</button>
+            <button class="filter-chip" data-filter="new" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">New (${newTests})</button>
           </div>
         </div>
-        <div class="filter-group" data-group="grade">
-          <div class="filter-group-title">Grade</div>
-          <div class="filter-chips grade-chips">
-            <button class="filter-chip grade-a" data-filter="grade-a" data-group="grade" onclick="toggleFilter(this)">A</button>
-            <button class="filter-chip grade-b" data-filter="grade-b" data-group="grade" onclick="toggleFilter(this)">B</button>
-            <button class="filter-chip grade-c" data-filter="grade-c" data-group="grade" onclick="toggleFilter(this)">C</button>
-            <button class="filter-chip grade-d" data-filter="grade-d" data-group="grade" onclick="toggleFilter(this)">D</button>
-            <button class="filter-chip grade-f" data-filter="grade-f" data-group="grade" onclick="toggleFilter(this)">F</button>
+        <div class="filter-group" data-group="grade" role="group" aria-label="Grade filters">
+          <div class="filter-group-title" id="grade-filter-label">Grade</div>
+          <div class="filter-chips grade-chips" role="group" aria-labelledby="grade-filter-label">
+            <button class="filter-chip grade-a" data-filter="grade-a" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade A">A</button>
+            <button class="filter-chip grade-b" data-filter="grade-b" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade B">B</button>
+            <button class="filter-chip grade-c" data-filter="grade-c" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade C">C</button>
+            <button class="filter-chip grade-d" data-filter="grade-d" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade D">D</button>
+            <button class="filter-chip grade-f" data-filter="grade-f" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade F">F</button>
           </div>
         </div>
       </div>
@@ -650,9 +657,9 @@ ${generateStyles(passRate, cspSafe)}
     </aside>
 
     <!-- Main Content Area -->
-    <main class="main-content" id="main-content" tabindex="-1">
+    <main class="main-content" id="main-content" tabindex="-1" aria-label="Test report content">
       <!-- Overview View -->
-      <section class="view-panel" id="view-overview">
+      <section class="view-panel" id="view-overview" role="tabpanel" aria-label="Overview">
         <div class="view-header">
           <h2 class="view-title">Overview</h2>
         </div>
@@ -662,19 +669,19 @@ ${generateStyles(passRate, cspSafe)}
       </section>
 
       <!-- Tests View (Master-Detail) -->
-      <section class="view-panel" id="view-tests" style="display: none;">
+      <section class="view-panel" id="view-tests" role="tabpanel" aria-label="Tests" style="display: none;">
         <div class="master-detail-layout">
           <!-- Test List (Master) -->
           <div class="test-list-panel">
             <div class="test-list-header">
-              <div class="test-list-tabs">
-                <button class="tab-btn active" data-tab="all" onclick="switchTestTab('all')">All Tests</button>
-                <button class="tab-btn" data-tab="by-file" onclick="switchTestTab('by-file')">By Spec</button>
-                <button class="tab-btn" data-tab="by-status" onclick="switchTestTab('by-status')">By Status</button>
-                <button class="tab-btn" data-tab="by-stability" onclick="switchTestTab('by-stability')">By Stability</button>
+              <div class="test-list-tabs" role="tablist" aria-label="Test grouping options">
+                <button class="tab-btn active" data-tab="all" onclick="switchTestTab('all')" role="tab" aria-selected="true" aria-controls="tab-all">All Tests</button>
+                <button class="tab-btn" data-tab="by-file" onclick="switchTestTab('by-file')" role="tab" aria-selected="false" aria-controls="tab-by-file">By Spec</button>
+                <button class="tab-btn" data-tab="by-status" onclick="switchTestTab('by-status')" role="tab" aria-selected="false" aria-controls="tab-by-status">By Status</button>
+                <button class="tab-btn" data-tab="by-stability" onclick="switchTestTab('by-stability')" role="tab" aria-selected="false" aria-controls="tab-by-stability">By Stability</button>
               </div>
               <div class="test-list-search">
-                <input type="text" class="inline-search" placeholder="Filter tests..." oninput="searchTests(this.value)">
+                <input type="text" class="inline-search" placeholder="Filter tests..." oninput="searchTests(this.value)" aria-label="Filter tests by name">
               </div>
             </div>
             <div class="test-list-content">
@@ -686,15 +693,17 @@ ${generateStyles(passRate, cspSafe)}
                 <button class="empty-state-action" onclick="clearAllFilters()">Clear filters</button>
               </div>
               <!-- All Tests Tab -->
-              <div class="test-tab-content active" id="tab-all">
-                ${generateTestListItems(sortedResults, showTraceSection, attentionSets)}
+              <div class="test-tab-content active" id="tab-all" role="tabpanel" aria-labelledby="tab-all-label">
+                <div role="list" aria-label="All tests">
+                  ${generateTestListItems(sortedResults, showTraceSection, attentionSets)}
+                </div>
               </div>
               <!-- By Spec Tab -->
-              <div class="test-tab-content" id="tab-by-file">
+              <div class="test-tab-content" id="tab-by-file" role="tabpanel" aria-labelledby="tab-by-file-label">
                 ${generateGroupedTests(sortedResults, showTraceSection, attentionSets)}
               </div>
               <!-- By Status Tab -->
-              <div class="test-tab-content" id="tab-by-status">
+              <div class="test-tab-content" id="tab-by-status" role="tabpanel" aria-labelledby="tab-by-status-label">
                 <div class="status-group failed-group">
                   <div class="status-group-header">
                     <span class="status-group-dot failed"></span>
@@ -748,7 +757,7 @@ ${generateStyles(passRate, cspSafe)}
       </section>
 
       <!-- Trends View -->
-      <section class="view-panel" id="view-trends" style="display: none;">
+      <section class="view-panel" id="view-trends" role="tabpanel" aria-label="Trends" style="display: none;">
         <div class="view-header">
           <h2 class="view-title">Trends</h2>
         </div>
@@ -759,7 +768,7 @@ ${generateStyles(passRate, cspSafe)}
 
       <!-- Comparison View -->
       ${showComparison ? `
-      <section class="view-panel" id="view-comparison" style="display: none;">
+      <section class="view-panel" id="view-comparison" role="tabpanel" aria-label="Comparison" style="display: none;">
         <div class="view-header">
           <h2 class="view-title">Run Comparison</h2>
         </div>
@@ -771,7 +780,7 @@ ${generateStyles(passRate, cspSafe)}
 
       <!-- Gallery View -->
       ${showGallery ? `
-      <section class="view-panel" id="view-gallery" style="display: none;">
+      <section class="view-panel" id="view-gallery" role="tabpanel" aria-label="Gallery" style="display: none;">
         <div class="view-header">
           <h2 class="view-title">Attachments Gallery</h2>
         </div>
@@ -784,15 +793,17 @@ ${generateStyles(passRate, cspSafe)}
   </div>
 
   <!-- Search Modal -->
-  <div class="search-modal" id="search-modal">
+  <div class="search-modal" id="search-modal" role="dialog" aria-modal="true" aria-labelledby="search-modal-title" aria-hidden="true">
     <div class="search-modal-backdrop" onclick="closeSearch()"></div>
     <div class="search-modal-content">
       <div class="search-modal-header">
-        <span class="search-modal-icon">🔍</span>
-        <input type="text" class="search-modal-input" id="search-modal-input" placeholder="Search tests..." oninput="handleSearchInput(this.value)">
-        <kbd class="search-modal-esc">ESC</kbd>
+        <span class="search-modal-icon" aria-hidden="true">🔍</span>
+        <label for="search-modal-input" class="visually-hidden" id="search-modal-title">Search tests</label>
+        <input type="text" class="search-modal-input" id="search-modal-input" placeholder="Search tests..." oninput="handleSearchInput(this.value)" aria-describedby="search-modal-hint">
+        <span id="search-modal-hint" class="visually-hidden">Press Escape to close</span>
+        <kbd class="search-modal-esc" aria-hidden="true">ESC</kbd>
       </div>
-      <div class="search-modal-results" id="search-modal-results"></div>
+      <div class="search-modal-results" id="search-modal-results" role="listbox" aria-label="Search results"></div>
     </div>
   </div>
 
@@ -4780,6 +4791,19 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       top: 0;
     }
 
+    /* Visually hidden but accessible to screen readers */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     /* ============================================
        EMPTY STATE UI
     ============================================ */
@@ -5066,20 +5090,27 @@ function generateScripts(
       const appShell = document.querySelector('.app-shell');
       const sidebar = document.getElementById('sidebar');
       const overlay = document.getElementById('sidebarOverlay');
+      const toggleBtn = document.querySelector('.sidebar-toggle');
 
       // Check if mobile (overlay mode)
       if (window.innerWidth <= 768) {
         sidebar.classList.toggle('open');
         overlay.classList.toggle('show');
+        const isOpen = sidebar.classList.contains('open');
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
       } else {
         appShell.classList.toggle('sidebar-collapsed');
+        const isExpanded = !appShell.classList.contains('sidebar-collapsed');
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
       }
     }
 
     function switchView(view) {
-      // Update nav items
+      // Update nav items and ARIA states
       document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.toggle('active', item.dataset.view === view);
+        const isActive = item.dataset.view === view;
+        item.classList.toggle('active', isActive);
+        item.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
 
       // Hide all view panels
@@ -5241,9 +5272,11 @@ function generateScripts(
     }
 
     function switchTestTab(tab) {
-      // Update tab buttons
+      // Update tab buttons and ARIA states
       document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tab);
+        const isActive = btn.dataset.tab === tab;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
 
       // Hide all tab content
@@ -5384,12 +5417,14 @@ function generateScripts(
     function openSearch() {
       const modal = document.getElementById('search-modal');
       modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
       document.getElementById('search-modal-input').focus();
     }
 
     function closeSearch() {
       const modal = document.getElementById('search-modal');
       modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
       document.getElementById('search-modal-input').value = '';
       document.getElementById('search-modal-results').innerHTML = '';
     }
@@ -5480,9 +5515,11 @@ function generateScripts(
       if (activeFilters[group].has(filter)) {
         activeFilters[group].delete(filter);
         chip.classList.remove('active');
+        chip.setAttribute('aria-pressed', 'false');
       } else {
         activeFilters[group].add(filter);
         chip.classList.add('active');
+        chip.setAttribute('aria-pressed', 'true');
       }
 
       applyFilters();
@@ -5495,6 +5532,7 @@ function generateScripts(
       activeFilters.grade.clear();
       document.querySelectorAll('.filter-chip').forEach(chip => {
         chip.classList.remove('active');
+        chip.setAttribute('aria-pressed', 'false');
       });
       applyFilters();
     }
