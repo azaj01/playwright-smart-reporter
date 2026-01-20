@@ -25,6 +25,13 @@ describe('formatDuration', () => {
     expect(formatDuration(90000)).toBe('1.5m');
     expect(formatDuration(120000)).toBe('2.0m');
   });
+
+  it('rounds milliseconds to whole numbers', () => {
+    expect(formatDuration(123.456)).toBe('123ms');
+    expect(formatDuration(99.9)).toBe('100ms');
+    expect(formatDuration(0.4)).toBe('0ms');
+    expect(formatDuration(50.5)).toBe('51ms');
+  });
 });
 
 describe('formatTimestamp', () => {

@@ -80,9 +80,12 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
       stabilityBadge = `<span class="stability-badge ${gradeClass}">${grade}</span>`;
     }
 
+    const statusLabel = test.status === 'passed' ? 'Passed' : test.status === 'skipped' ? 'Skipped' : 'Failed';
     return `
-      <div class="test-list-item ${statusClass}" 
+      <div class="test-list-item ${statusClass}"
            id="list-item-${cardId}"
+           role="listitem"
+           aria-label="${escapeHtml(test.title)} - ${statusLabel}"
            data-testid="${escapeHtml(test.testId)}"
            data-status="${test.status}"
            data-flaky="${isFlaky}"
@@ -93,8 +96,10 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
            data-fixed="${isFixed}"
            data-file="${escapeHtml(test.file)}"
            data-grade="${test.stabilityScore?.grade || ''}"
-           onclick="selectTest('${cardId}')">
-        <div class="test-item-status">
+           onclick="selectTest('${cardId}')"
+           tabindex="0"
+           onkeydown="if(event.key==='Enter')selectTest('${cardId}')">
+        <div class="test-item-status" aria-hidden="true">
           <div class="status-dot ${statusClass}"></div>
         </div>
         <div class="test-item-info">
@@ -175,15 +180,28 @@ function generateOverviewContent(
         <span class="section-title">Failure Clusters</span>
       </div>
       <div class="failure-clusters-grid">
-        ${failureClusters.slice(0, 5).map(cluster => `
+        ${failureClusters.slice(0, 5).map(cluster => {
+          const firstError = cluster.tests[0]?.error || '';
+          const errorPreview = firstError.split('\n')[0].slice(0, 100) + (firstError.length > 100 ? '...' : '');
+          const affectedFiles = [...new Set(cluster.tests.map(t => t.file))];
+          return `
           <div class="cluster-card" onclick="filterTests('failed'); switchView('tests');">
-            <div class="cluster-icon">⚠</div>
-            <div class="cluster-content">
+            <div class="cluster-header">
+              <div class="cluster-icon">⚠️</div>
               <div class="cluster-type">${escapeHtml(cluster.errorType)}</div>
               <div class="cluster-count">${cluster.count} test${cluster.count > 1 ? 's' : ''}</div>
             </div>
+            ${errorPreview ? `<div class="cluster-error">${escapeHtml(errorPreview)}</div>` : ''}
+            <div class="cluster-tests">
+              ${cluster.tests.slice(0, 3).map(t => `<span class="cluster-test-name">${escapeHtml(t.title)}</span>`).join('')}
+              ${cluster.tests.length > 3 ? `<span class="cluster-more">+${cluster.tests.length - 3} more</span>` : ''}
+            </div>
+            <div class="cluster-files">
+              ${affectedFiles.slice(0, 2).map(f => `<span class="cluster-file">${escapeHtml(f)}</span>`).join('')}
+              ${affectedFiles.length > 2 ? `<span class="cluster-more">+${affectedFiles.length - 2} files</span>` : ''}
+            </div>
           </div>
-        `).join('')}
+        `}).join('')}
       </div>
     </div>
   ` : '';
@@ -275,24 +293,24 @@ function generateOverviewContent(
 
       <div class="hero-stat-card mini-comparison">
         <div class="mini-bars">
-          <div class="mini-bar-row">
+          <div class="mini-bar-row clickable" onclick="filterByStatus('passed')" title="View passed tests" role="button" tabindex="0">
             <span class="mini-bar-label">Passed</span>
             <div class="mini-bar-track">
-              <div class="mini-bar passed" style="width: ${(passed / Math.max(total, 1)) * 100}%"></div>
+              <div class="mini-bar passed" style="width: ${((passed / Math.max(total, 1)) * 100).toFixed(1)}%"></div>
             </div>
             <span class="mini-bar-value">${passed}</span>
           </div>
-          <div class="mini-bar-row">
+          <div class="mini-bar-row clickable" onclick="filterByStatus('failed')" title="View failed tests" role="button" tabindex="0">
             <span class="mini-bar-label">Failed</span>
             <div class="mini-bar-track">
-              <div class="mini-bar failed" style="width: ${(failed / Math.max(total, 1)) * 100}%"></div>
+              <div class="mini-bar failed" style="width: ${((failed / Math.max(total, 1)) * 100).toFixed(1)}%"></div>
             </div>
             <span class="mini-bar-value">${failed}</span>
           </div>
-          <div class="mini-bar-row">
+          <div class="mini-bar-row clickable" onclick="filterByStatus('skipped')" title="View skipped tests" role="button" tabindex="0">
             <span class="mini-bar-label">Skipped</span>
             <div class="mini-bar-track">
-              <div class="mini-bar skipped" style="width: ${(skipped / Math.max(total, 1)) * 100}%"></div>
+              <div class="mini-bar skipped" style="width: ${((skipped / Math.max(total, 1)) * 100).toFixed(1)}%"></div>
             </div>
             <span class="mini-bar-value">${skipped}</span>
           </div>
@@ -331,7 +349,7 @@ function generateOverviewContent(
             </div>
           </div>
         ` : ''}
-        <div class="insight-card">
+        <div class="insight-card clickable" onclick="switchView('tests')" title="View all tests">
           <div class="insight-icon">📊</div>
           <div class="insight-content">
             <div class="insight-label">Test Distribution</div>
@@ -342,7 +360,7 @@ function generateOverviewContent(
             </div>
           </div>
         </div>
-        <div class="insight-card">
+        <div class="insight-card clickable" onclick="switchView('trends')" title="View trends">
           <div class="insight-icon">📈</div>
           <div class="insight-content">
             <div class="insight-label">Pass Rate Trend</div>
@@ -458,13 +476,16 @@ ${generateStyles(passRate, cspSafe)}
   </style>
 </head>
 <body>
+  <!-- Skip to main content for accessibility -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
   <!-- App Shell -->
-  <div class="app-shell">
+  <div class="app-shell" role="application">
     <!-- Top Bar -->
     <header class="top-bar">
       <div class="top-bar-left">
-        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar (⌘B)">
-          <span class="hamburger-icon">☰</span>
+        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar (⌘B)" aria-label="Toggle sidebar navigation" aria-expanded="true" aria-controls="sidebar">
+          <span class="hamburger-icon" aria-hidden="true">☰</span>
         </button>
         <div class="logo">
           <div class="logo-icon">S</div>
@@ -480,29 +501,62 @@ ${generateStyles(passRate, cspSafe)}
         </nav>
       </div>
       <div class="top-bar-right">
-        <button class="search-trigger" onclick="openSearch()" title="Search (⌘K)">
+        <button class="search-trigger" onclick="openSearch()" title="Search (⌘K)" aria-label="Search tests">
           <span class="search-icon-btn">🔍</span>
           <span class="search-label">Search...</span>
           <kbd class="search-kbd">⌘K</kbd>
         </button>
-        <button class="top-bar-btn" onclick="exportJSON()" title="Export JSON">
-          <span>📥</span>
-          <span class="btn-label">Export</span>
-        </button>
+        <div class="export-dropdown" id="exportDropdown">
+          <button class="top-bar-btn" onclick="toggleExportMenu()" title="Export" aria-haspopup="true" aria-expanded="false">
+            <span>📥</span>
+            <span class="btn-label">Export</span>
+          </button>
+          <div class="export-menu" role="menu">
+            <button class="export-menu-item" onclick="exportJSON()" role="menuitem">
+              <span>📄</span> JSON
+            </button>
+            <button class="export-menu-item" onclick="exportCSV()" role="menuitem">
+              <span>📊</span> CSV
+            </button>
+          </div>
+        </div>
+        <div class="theme-dropdown" id="themeDropdown">
+          <button class="theme-toggle" onclick="toggleThemeMenu()" title="Theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false">
+            <span class="theme-toggle-icon" id="themeIcon">🌙</span>
+            <span class="theme-label" id="themeLabel">Dark</span>
+          </button>
+          <div class="theme-menu" role="menu">
+            <button class="theme-menu-item" onclick="setTheme('system')" role="menuitem" data-theme="system">
+              <span>💻</span> System
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('light')" role="menuitem" data-theme="light">
+              <span>☀️</span> Light
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('dark')" role="menuitem" data-theme="dark">
+              <span>🌙</span> Dark
+            </button>
+          </div>
+        </div>
         <div class="timestamp">${new Date().toLocaleString()}</div>
       </div>
     </header>
+
+    <!-- Mobile sidebar overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- Toast notifications container -->
+    <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <!-- Progress Ring -->
       <div class="sidebar-progress">
-        <div class="progress-ring-container">
+        <div class="progress-ring-container clickable" onclick="switchView('tests')" title="View all tests" role="button" tabindex="0">
           <svg class="progress-ring" width="80" height="80">
             <circle class="progress-ring-bg" cx="40" cy="40" r="34"/>
-            <circle class="progress-ring-fill" cx="40" cy="40" r="34" 
-                    stroke-dasharray="213.6" 
-                    stroke-dashoffset="${213.6 - (213.6 * passRate) / 100}"/>
+            <circle class="progress-ring-fill" cx="40" cy="40" r="34"
+                    stroke-dasharray="213.6"
+                    stroke-dashoffset="${(213.6 - (213.6 * passRate) / 100).toFixed(1)}"/>
           </svg>
           <div class="progress-ring-value">${passRate}%</div>
         </div>
@@ -510,88 +564,90 @@ ${generateStyles(passRate, cspSafe)}
       </div>
 
       <!-- Quick Stats -->
-      <div class="sidebar-stats">
-        <div class="mini-stat passed" onclick="filterTests('passed')" title="Passed tests">
+      <div class="sidebar-stats" role="group" aria-label="Test statistics">
+        <button class="mini-stat passed" onclick="filterTests('passed')" title="Passed tests" aria-label="${passed} passed tests - click to filter">
           <span class="mini-stat-value">${passed}</span>
           <span class="mini-stat-label">Passed</span>
-        </div>
-        <div class="mini-stat failed" onclick="filterTests('failed')" title="Failed tests">
+        </button>
+        <button class="mini-stat failed" onclick="filterTests('failed')" title="Failed tests" aria-label="${failed} failed tests - click to filter">
           <span class="mini-stat-value">${failed}</span>
           <span class="mini-stat-label">Failed</span>
-        </div>
-        <div class="mini-stat flaky" onclick="filterTests('flaky')" title="Flaky tests">
+        </button>
+        <button class="mini-stat flaky" onclick="filterTests('flaky')" title="Flaky tests" aria-label="${flaky} flaky tests - click to filter">
           <span class="mini-stat-value">${flaky}</span>
           <span class="mini-stat-label">Flaky</span>
-        </div>
+        </button>
       </div>
 
       <!-- Navigation -->
-      <nav class="sidebar-nav">
-        <div class="nav-section-title">Navigation</div>
-        <a class="nav-item active" data-view="overview" onclick="switchView('overview')">
-          <span class="nav-icon">📊</span>
-          <span class="nav-label">Overview</span>
-        </a>
-        <a class="nav-item" data-view="tests" onclick="switchView('tests')">
-          <span class="nav-icon">🧪</span>
-          <span class="nav-label">Tests</span>
-          <span class="nav-badge">${total}</span>
-        </a>
-        <a class="nav-item" data-view="trends" onclick="switchView('trends')">
-          <span class="nav-icon">📈</span>
-          <span class="nav-label">Trends</span>
-        </a>
-        ${showComparison ? `
-        <a class="nav-item" data-view="comparison" onclick="switchView('comparison')">
-          <span class="nav-icon">⚖️</span>
-          <span class="nav-label">Comparison</span>
-        </a>
-        ` : ''}
-        ${showGallery ? `
-        <a class="nav-item" data-view="gallery" onclick="switchView('gallery')">
-          <span class="nav-icon">🖼️</span>
-          <span class="nav-label">Gallery</span>
-        </a>
-        ` : ''}
+      <nav class="sidebar-nav" aria-label="Main navigation">
+        <div class="nav-section-title" id="nav-section-label">Navigation</div>
+        <div role="tablist" aria-labelledby="nav-section-label">
+          <button class="nav-item active" data-view="overview" onclick="switchView('overview')" role="tab" aria-selected="true" aria-controls="view-overview">
+            <span class="nav-icon" aria-hidden="true">📊</span>
+            <span class="nav-label">Overview</span>
+          </button>
+          <button class="nav-item" data-view="tests" onclick="switchView('tests')" role="tab" aria-selected="false" aria-controls="view-tests">
+            <span class="nav-icon" aria-hidden="true">🧪</span>
+            <span class="nav-label">Tests</span>
+            <span class="nav-badge" aria-label="${total} total tests">${total}</span>
+          </button>
+          <button class="nav-item" data-view="trends" onclick="switchView('trends')" role="tab" aria-selected="false" aria-controls="view-trends">
+            <span class="nav-icon" aria-hidden="true">📈</span>
+            <span class="nav-label">Trends</span>
+          </button>
+          ${showComparison ? `
+          <button class="nav-item" data-view="comparison" onclick="switchView('comparison')" role="tab" aria-selected="false" aria-controls="view-comparison">
+            <span class="nav-icon" aria-hidden="true">⚖️</span>
+            <span class="nav-label">Comparison</span>
+          </button>
+          ` : ''}
+          ${showGallery ? `
+          <button class="nav-item" data-view="gallery" onclick="switchView('gallery')" role="tab" aria-selected="false" aria-controls="view-gallery">
+            <span class="nav-icon" aria-hidden="true">🖼️</span>
+            <span class="nav-label">Gallery</span>
+          </button>
+          ` : ''}
+        </div>
       </nav>
 
       <!-- Filters -->
-      <div class="sidebar-filters">
-        <div class="nav-section-title">Filters <button class="clear-filters-btn" onclick="clearAllFilters()" title="Clear all filters">✕</button></div>
+      <div class="sidebar-filters" role="region" aria-label="Test filters">
+        <div class="nav-section-title">Filters <button class="clear-filters-btn" onclick="clearAllFilters()" title="Clear all filters" aria-label="Clear all filters">✕</button></div>
         ${hasAttention ? `
-        <div class="filter-group" data-group="attention">
-          <div class="filter-group-title">Attention</div>
-          <div class="filter-chips attention-chips">
-            ${newFailuresCount > 0 ? `<button class="filter-chip attention-new-failure" data-filter="new-failure" data-group="attention" onclick="toggleFilter(this)">New Failure (${newFailuresCount})</button>` : ''}
-            ${regressionsCount > 0 ? `<button class="filter-chip attention-regression" data-filter="regression" data-group="attention" onclick="toggleFilter(this)">Regression (${regressionsCount})</button>` : ''}
-            ${fixedCount > 0 ? `<button class="filter-chip attention-fixed" data-filter="fixed" data-group="attention" onclick="toggleFilter(this)">Fixed (${fixedCount})</button>` : ''}
+        <div class="filter-group" data-group="attention" role="group" aria-label="Attention filters">
+          <div class="filter-group-title" id="attention-filter-label">Attention</div>
+          <div class="filter-chips attention-chips" role="group" aria-labelledby="attention-filter-label">
+            ${newFailuresCount > 0 ? `<button class="filter-chip attention-new-failure" data-filter="new-failure" data-group="attention" onclick="toggleFilter(this)" aria-pressed="false">New Failure (${newFailuresCount})</button>` : ''}
+            ${regressionsCount > 0 ? `<button class="filter-chip attention-regression" data-filter="regression" data-group="attention" onclick="toggleFilter(this)" aria-pressed="false">Regression (${regressionsCount})</button>` : ''}
+            ${fixedCount > 0 ? `<button class="filter-chip attention-fixed" data-filter="fixed" data-group="attention" onclick="toggleFilter(this)" aria-pressed="false">Fixed (${fixedCount})</button>` : ''}
           </div>
         </div>
         ` : ''}
-        <div class="filter-group" data-group="status">
-          <div class="filter-group-title">Status</div>
-          <div class="filter-chips">
-            <button class="filter-chip" data-filter="passed" data-group="status" onclick="toggleFilter(this)">Passed</button>
-            <button class="filter-chip" data-filter="failed" data-group="status" onclick="toggleFilter(this)">Failed</button>
-            <button class="filter-chip" data-filter="skipped" data-group="status" onclick="toggleFilter(this)">Skipped</button>
+        <div class="filter-group" data-group="status" role="group" aria-label="Status filters">
+          <div class="filter-group-title" id="status-filter-label">Status</div>
+          <div class="filter-chips" role="group" aria-labelledby="status-filter-label">
+            <button class="filter-chip" data-filter="passed" data-group="status" onclick="toggleFilter(this)" aria-pressed="false">Passed</button>
+            <button class="filter-chip" data-filter="failed" data-group="status" onclick="toggleFilter(this)" aria-pressed="false">Failed</button>
+            <button class="filter-chip" data-filter="skipped" data-group="status" onclick="toggleFilter(this)" aria-pressed="false">Skipped</button>
           </div>
         </div>
-        <div class="filter-group" data-group="health">
-          <div class="filter-group-title">Health</div>
-          <div class="filter-chips">
-            <button class="filter-chip" data-filter="flaky" data-group="health" onclick="toggleFilter(this)">Flaky (${flaky})</button>
-            <button class="filter-chip" data-filter="slow" data-group="health" onclick="toggleFilter(this)">Slow (${slow})</button>
-            <button class="filter-chip" data-filter="new" data-group="health" onclick="toggleFilter(this)">New (${newTests})</button>
+        <div class="filter-group" data-group="health" role="group" aria-label="Health filters">
+          <div class="filter-group-title" id="health-filter-label">Health</div>
+          <div class="filter-chips" role="group" aria-labelledby="health-filter-label">
+            <button class="filter-chip" data-filter="flaky" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">Flaky (${flaky})</button>
+            <button class="filter-chip" data-filter="slow" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">Slow (${slow})</button>
+            <button class="filter-chip" data-filter="new" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">New (${newTests})</button>
           </div>
         </div>
-        <div class="filter-group" data-group="grade">
-          <div class="filter-group-title">Grade</div>
-          <div class="filter-chips grade-chips">
-            <button class="filter-chip grade-a" data-filter="grade-a" data-group="grade" onclick="toggleFilter(this)">A</button>
-            <button class="filter-chip grade-b" data-filter="grade-b" data-group="grade" onclick="toggleFilter(this)">B</button>
-            <button class="filter-chip grade-c" data-filter="grade-c" data-group="grade" onclick="toggleFilter(this)">C</button>
-            <button class="filter-chip grade-d" data-filter="grade-d" data-group="grade" onclick="toggleFilter(this)">D</button>
-            <button class="filter-chip grade-f" data-filter="grade-f" data-group="grade" onclick="toggleFilter(this)">F</button>
+        <div class="filter-group" data-group="grade" role="group" aria-label="Grade filters">
+          <div class="filter-group-title" id="grade-filter-label">Grade</div>
+          <div class="filter-chips grade-chips" role="group" aria-labelledby="grade-filter-label">
+            <button class="filter-chip grade-a" data-filter="grade-a" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade A">A</button>
+            <button class="filter-chip grade-b" data-filter="grade-b" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade B">B</button>
+            <button class="filter-chip grade-c" data-filter="grade-c" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade C">C</button>
+            <button class="filter-chip grade-d" data-filter="grade-d" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade D">D</button>
+            <button class="filter-chip grade-f" data-filter="grade-f" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade F">F</button>
           </div>
         </div>
       </div>
@@ -614,9 +670,9 @@ ${generateStyles(passRate, cspSafe)}
     </aside>
 
     <!-- Main Content Area -->
-    <main class="main-content">
+    <main class="main-content" id="main-content" tabindex="-1" aria-label="Test report content">
       <!-- Overview View -->
-      <section class="view-panel" id="view-overview">
+      <section class="view-panel" id="view-overview" role="tabpanel" aria-label="Overview">
         <div class="view-header">
           <h2 class="view-title">Overview</h2>
         </div>
@@ -626,32 +682,41 @@ ${generateStyles(passRate, cspSafe)}
       </section>
 
       <!-- Tests View (Master-Detail) -->
-      <section class="view-panel" id="view-tests" style="display: none;">
+      <section class="view-panel" id="view-tests" role="tabpanel" aria-label="Tests" style="display: none;">
         <div class="master-detail-layout">
           <!-- Test List (Master) -->
           <div class="test-list-panel">
             <div class="test-list-header">
-              <div class="test-list-tabs">
-                <button class="tab-btn active" data-tab="all" onclick="switchTestTab('all')">All Tests</button>
-                <button class="tab-btn" data-tab="by-file" onclick="switchTestTab('by-file')">By Spec</button>
-                <button class="tab-btn" data-tab="by-status" onclick="switchTestTab('by-status')">By Status</button>
-                <button class="tab-btn" data-tab="by-stability" onclick="switchTestTab('by-stability')">By Stability</button>
+              <div class="test-list-tabs" role="tablist" aria-label="Test grouping options">
+                <button class="tab-btn active" data-tab="all" onclick="switchTestTab('all')" role="tab" aria-selected="true" aria-controls="tab-all">All Tests</button>
+                <button class="tab-btn" data-tab="by-file" onclick="switchTestTab('by-file')" role="tab" aria-selected="false" aria-controls="tab-by-file">By Spec</button>
+                <button class="tab-btn" data-tab="by-status" onclick="switchTestTab('by-status')" role="tab" aria-selected="false" aria-controls="tab-by-status">By Status</button>
+                <button class="tab-btn" data-tab="by-stability" onclick="switchTestTab('by-stability')" role="tab" aria-selected="false" aria-controls="tab-by-stability">By Stability</button>
               </div>
               <div class="test-list-search">
-                <input type="text" class="inline-search" placeholder="Filter tests..." oninput="searchTests(this.value)">
+                <input type="text" class="inline-search" placeholder="Filter tests..." oninput="searchTests(this.value)" aria-label="Filter tests by name">
               </div>
             </div>
             <div class="test-list-content">
+              <!-- Empty state for no results -->
+              <div class="empty-state" id="emptyState" style="display: none;">
+                <div class="empty-state-icon">🔍</div>
+                <div class="empty-state-title">No tests found</div>
+                <div class="empty-state-message">No tests match your current filters. Try adjusting your search or filter criteria.</div>
+                <button class="empty-state-action" onclick="clearAllFilters()">Clear filters</button>
+              </div>
               <!-- All Tests Tab -->
-              <div class="test-tab-content active" id="tab-all">
-                ${generateTestListItems(sortedResults, showTraceSection, attentionSets)}
+              <div class="test-tab-content active" id="tab-all" role="tabpanel" aria-labelledby="tab-all-label">
+                <div role="list" aria-label="All tests">
+                  ${generateTestListItems(sortedResults, showTraceSection, attentionSets)}
+                </div>
               </div>
               <!-- By Spec Tab -->
-              <div class="test-tab-content" id="tab-by-file">
+              <div class="test-tab-content" id="tab-by-file" role="tabpanel" aria-labelledby="tab-by-file-label">
                 ${generateGroupedTests(sortedResults, showTraceSection, attentionSets)}
               </div>
               <!-- By Status Tab -->
-              <div class="test-tab-content" id="tab-by-status">
+              <div class="test-tab-content" id="tab-by-status" role="tabpanel" aria-labelledby="tab-by-status-label">
                 <div class="status-group failed-group">
                   <div class="status-group-header">
                     <span class="status-group-dot failed"></span>
@@ -705,7 +770,7 @@ ${generateStyles(passRate, cspSafe)}
       </section>
 
       <!-- Trends View -->
-      <section class="view-panel" id="view-trends" style="display: none;">
+      <section class="view-panel" id="view-trends" role="tabpanel" aria-label="Trends" style="display: none;">
         <div class="view-header">
           <h2 class="view-title">Trends</h2>
         </div>
@@ -716,7 +781,7 @@ ${generateStyles(passRate, cspSafe)}
 
       <!-- Comparison View -->
       ${showComparison ? `
-      <section class="view-panel" id="view-comparison" style="display: none;">
+      <section class="view-panel" id="view-comparison" role="tabpanel" aria-label="Comparison" style="display: none;">
         <div class="view-header">
           <h2 class="view-title">Run Comparison</h2>
         </div>
@@ -728,7 +793,7 @@ ${generateStyles(passRate, cspSafe)}
 
       <!-- Gallery View -->
       ${showGallery ? `
-      <section class="view-panel" id="view-gallery" style="display: none;">
+      <section class="view-panel" id="view-gallery" role="tabpanel" aria-label="Gallery" style="display: none;">
         <div class="view-header">
           <h2 class="view-title">Attachments Gallery</h2>
         </div>
@@ -741,15 +806,17 @@ ${generateStyles(passRate, cspSafe)}
   </div>
 
   <!-- Search Modal -->
-  <div class="search-modal" id="search-modal">
+  <div class="search-modal" id="search-modal" role="dialog" aria-modal="true" aria-labelledby="search-modal-title" aria-hidden="true">
     <div class="search-modal-backdrop" onclick="closeSearch()"></div>
     <div class="search-modal-content">
       <div class="search-modal-header">
-        <span class="search-modal-icon">🔍</span>
-        <input type="text" class="search-modal-input" id="search-modal-input" placeholder="Search tests..." oninput="handleSearchInput(this.value)">
-        <kbd class="search-modal-esc">ESC</kbd>
+        <span class="search-modal-icon" aria-hidden="true">🔍</span>
+        <label for="search-modal-input" class="visually-hidden" id="search-modal-title">Search tests</label>
+        <input type="text" class="search-modal-input" id="search-modal-input" placeholder="Search tests..." oninput="handleSearchInput(this.value)" aria-describedby="search-modal-hint">
+        <span id="search-modal-hint" class="visually-hidden">Press Escape to close</span>
+        <kbd class="search-modal-esc" aria-hidden="true">ESC</kbd>
       </div>
-      <div class="search-modal-results" id="search-modal-results"></div>
+      <div class="search-modal-results" id="search-modal-results" role="listbox" aria-label="Search results"></div>
     </div>
   </div>
 
@@ -802,7 +869,89 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       --topbar-height: 56px;
     }
 
+    /* Light theme - respects system preference */
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg-primary: #f5f5f7;
+        --bg-secondary: #ffffff;
+        --bg-card: #ffffff;
+        --bg-card-hover: #f0f0f2;
+        --bg-sidebar: #fafafa;
+        --border-subtle: #e0e0e5;
+        --border-glow: #d0d0d8;
+        --text-primary: #1a1a1f;
+        --text-secondary: #5a5a6e;
+        --text-muted: #8a8a9a;
+        --accent-green: #00aa55;
+        --accent-green-dim: #008844;
+        --accent-red: #dd3344;
+        --accent-red-dim: #bb2233;
+        --accent-yellow: #cc9900;
+        --accent-yellow-dim: #aa7700;
+        --accent-blue: #0077cc;
+        --accent-blue-dim: #005599;
+        --accent-purple: #8844cc;
+        --accent-orange: #dd6622;
+      }
+    }
+
+    /* Manual dark theme override */
+    :root[data-theme="dark"] {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: #1a1a24;
+      --bg-card-hover: #22222e;
+      --bg-sidebar: #0d0d14;
+      --border-subtle: #2a2a3a;
+      --border-glow: #3b3b4f;
+      --text-primary: #f0f0f5;
+      --text-secondary: #8888a0;
+      --text-muted: #5a5a70;
+      --accent-green: #00ff88;
+      --accent-green-dim: #00cc6a;
+      --accent-red: #ff4466;
+      --accent-red-dim: #cc3355;
+      --accent-yellow: #ffcc00;
+      --accent-yellow-dim: #ccaa00;
+      --accent-blue: #00aaff;
+      --accent-blue-dim: #0088cc;
+      --accent-purple: #aa66ff;
+      --accent-orange: #ff8844;
+    }
+
+    /* Manual light theme override */
+    :root[data-theme="light"] {
+      --bg-primary: #f5f5f7;
+      --bg-secondary: #ffffff;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f0f0f2;
+      --bg-sidebar: #fafafa;
+      --border-subtle: #e0e0e5;
+      --border-glow: #d0d0d8;
+      --text-primary: #1a1a1f;
+      --text-secondary: #5a5a6e;
+      --text-muted: #8a8a9a;
+      --accent-green: #00aa55;
+      --accent-green-dim: #008844;
+      --accent-red: #dd3344;
+      --accent-red-dim: #bb2233;
+      --accent-yellow: #cc9900;
+      --accent-yellow-dim: #aa7700;
+      --accent-blue: #0077cc;
+      --accent-blue-dim: #005599;
+      --accent-purple: #8844cc;
+      --accent-orange: #dd6622;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    button {
+      background: none;
+      border: none;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
 
     body {
       font-family: ${primaryFont};
@@ -825,6 +974,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       grid-template-rows: var(--topbar-height) 1fr;
       height: 100vh;
       overflow: hidden;
+      transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .app-shell.sidebar-collapsed {
@@ -833,6 +983,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     .app-shell.sidebar-collapsed .sidebar {
       transform: translateX(-100%);
+      opacity: 0;
     }
 
     /* ============================================
@@ -1021,7 +1172,12 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       border-right: 1px solid var(--border-subtle);
       overflow-y: auto;
       overflow-x: hidden;
-      transition: transform 0.2s ease;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    }
+
+    /* Hidden by default on desktop */
+    .sidebar-overlay {
+      display: none;
     }
 
     .sidebar-progress {
@@ -1035,6 +1191,16 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       width: 80px;
       height: 80px;
       margin: 0 auto;
+    }
+
+    .progress-ring-container.clickable {
+      cursor: pointer;
+      transition: transform 0.2s, filter 0.2s;
+    }
+
+    .progress-ring-container.clickable:hover {
+      transform: scale(1.05);
+      filter: brightness(1.1);
     }
 
     .progress-ring {
@@ -1090,13 +1256,15 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       align-items: center;
       padding: 0.5rem;
       background: var(--bg-card);
-      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .mini-stat:hover {
       background: var(--bg-card-hover);
+      border-color: var(--border-glow);
       transform: translateY(-1px);
     }
 
@@ -1121,16 +1289,24 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       border-bottom: 1px solid var(--border-subtle);
     }
 
+    .sidebar-nav [role="tablist"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
     .nav-section-title {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 0.5rem;
       font-size: 0.65rem;
       font-weight: 600;
       color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.1em;
       padding: 0.5rem 0.75rem;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border-subtle);
     }
 
     .clear-filters-btn {
@@ -1152,9 +1328,12 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     }
 
     .nav-item {
+      position: relative;
       display: flex;
+      flex-direction: row;
       align-items: center;
       gap: 0.75rem;
+      width: 100%;
       padding: 0.6rem 0.75rem;
       border-radius: 8px;
       color: var(--text-secondary);
@@ -1162,6 +1341,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       cursor: pointer;
       transition: all 0.2s;
       font-size: 0.85rem;
+      text-align: left;
     }
 
     .nav-item:hover {
@@ -1171,12 +1351,13 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     .nav-item.active {
       background: var(--bg-card);
-      color: var(--text-primary);
-      box-shadow: inset 3px 0 0 var(--accent-green);
+      color: var(--accent-green);
+      border-left: 3px solid var(--accent-green);
+      padding-left: calc(0.75rem - 3px);
     }
 
-    .nav-icon { font-size: 1rem; }
-    .nav-label { flex: 1; }
+    .nav-icon { font-size: 1rem; flex-shrink: 0; }
+    .nav-label { flex: 1; font-weight: 500; white-space: nowrap; }
     .nav-badge {
       font-family: ${monoFont};
       font-size: 0.7rem;
@@ -1212,9 +1393,9 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     .filter-chip {
       font-family: ${monoFont};
-      font-size: 0.7rem;
-      padding: 0.3rem 0.5rem;
-      border-radius: 6px;
+      font-size: 0.65rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: 20px;
       border: 1px solid var(--border-subtle);
       background: transparent;
       color: var(--text-muted);
@@ -1229,9 +1410,9 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     }
 
     .filter-chip.active {
-      background: var(--text-primary);
-      color: var(--bg-primary);
-      border-color: var(--text-primary);
+      background: var(--bg-card);
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
     }
 
     .grade-chips .filter-chip {
@@ -1428,11 +1609,17 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       background: var(--bg-secondary);
     }
 
+    .stat-card.large.passed { border-left: 3px solid var(--accent-green); }
     .stat-card.large.passed .stat-icon { background: rgba(0, 255, 136, 0.1); color: var(--accent-green); }
+    .stat-card.large.failed { border-left: 3px solid var(--accent-red); }
     .stat-card.large.failed .stat-icon { background: rgba(255, 68, 102, 0.1); color: var(--accent-red); }
+    .stat-card.large.skipped { border-left: 3px solid var(--text-muted); }
     .stat-card.large.skipped .stat-icon { background: rgba(90, 90, 112, 0.1); color: var(--text-muted); }
+    .stat-card.large.flaky { border-left: 3px solid var(--accent-yellow); }
     .stat-card.large.flaky .stat-icon { background: rgba(255, 204, 0, 0.1); color: var(--accent-yellow); }
+    .stat-card.large.slow { border-left: 3px solid var(--accent-orange); }
     .stat-card.large.slow .stat-icon { background: rgba(255, 136, 68, 0.1); color: var(--accent-orange); }
+    .stat-card.large.duration { border-left: 3px solid var(--accent-blue); }
     .stat-card.large.duration .stat-icon { background: rgba(0, 170, 255, 0.1); color: var(--accent-blue); }
 
     .stat-content { flex: 1; }
@@ -1615,6 +1802,18 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       gap: 0.5rem;
     }
 
+    .mini-bar-row.clickable {
+      cursor: pointer;
+      padding: 0.35rem 0.5rem;
+      margin: -0.35rem -0.5rem;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+
+    .mini-bar-row.clickable:hover {
+      background: var(--bg-card-hover);
+    }
+
     .mini-bar-label {
       font-size: 0.7rem;
       color: var(--text-muted);
@@ -1734,49 +1933,100 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     ============================================ */
     .failure-clusters-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
     }
 
     .cluster-card {
       display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.75rem 1rem;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 1rem;
       background: var(--bg-card);
       border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--accent-red);
       border-radius: 8px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .cluster-card:hover {
-      background: var(--bg-secondary);
-      border-color: var(--accent-red);
+      background: var(--bg-card-hover);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .cluster-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
     .cluster-icon {
-      font-size: 1.2rem;
-      color: var(--accent-red);
-    }
-
-    .cluster-content {
-      flex: 1;
-      min-width: 0;
+      font-size: 1rem;
     }
 
     .cluster-type {
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: var(--text-secondary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent-red);
+      flex: 1;
     }
 
     .cluster-count {
       font-size: 0.7rem;
       color: var(--text-muted);
+      background: var(--bg-secondary);
+      padding: 0.15rem 0.5rem;
+      border-radius: 10px;
+    }
+
+    .cluster-error {
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cluster-tests {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .cluster-test-name {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 150px;
+    }
+
+    .cluster-files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.25rem;
+    }
+
+    .cluster-file {
+      font-family: ${monoFont};
+      font-size: 0.65rem;
+      color: var(--text-muted);
+    }
+
+    .cluster-more {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      font-style: italic;
     }
 
     /* ============================================
@@ -1928,24 +2178,26 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     .tab-btn {
       font-size: 0.75rem;
-      padding: 0.4rem 0.75rem;
-      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
       border: 1px solid transparent;
       background: transparent;
       color: var(--text-muted);
       cursor: pointer;
       transition: all 0.2s;
       font-family: inherit;
+      font-weight: 500;
     }
 
     .tab-btn:hover {
-      background: var(--bg-secondary);
+      background: var(--bg-card);
       color: var(--text-secondary);
     }
 
     .tab-btn.active {
-      background: var(--text-primary);
-      color: var(--bg-primary);
+      background: var(--bg-card);
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
     }
 
     .test-list-search {
@@ -3177,6 +3429,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       border-radius: 12px;
       overflow: hidden;
       transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
     /* Allow history tooltips to escape the card when expanded */
@@ -3184,11 +3437,13 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       overflow: visible;
       position: relative;
       z-index: 1;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
 
     .test-card:hover {
       border-color: var(--border-glow);
       background: var(--bg-card-hover);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     }
 
     .test-card.keyboard-focus {
@@ -3219,34 +3474,21 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       height: 10px;
       border-radius: 50%;
       flex-shrink: 0;
-      animation: pulse 2s infinite;
     }
 
     .status-indicator.passed {
       background: var(--accent-green);
-      box-shadow: 0 0 12px var(--accent-green);
+      box-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
     }
 
     .status-indicator.failed {
       background: var(--accent-red);
-      box-shadow: 0 0 12px var(--accent-red);
-      animation: pulse-red 1.5s infinite;
+      box-shadow: 0 0 8px rgba(255, 68, 102, 0.5);
     }
 
     .status-indicator.skipped {
       background: var(--text-muted);
       box-shadow: none;
-      animation: none;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
-    }
-
-    @keyframes pulse-red {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.8; transform: scale(1.1); }
     }
 
     .test-info { min-width: 0; flex: 1; }
@@ -4481,6 +4723,485 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       border-radius: 4px;
       border: 1px solid var(--accent-red-dim);
     }
+
+    /* ============================================
+       TOAST NOTIFICATIONS
+    ============================================ */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      transform: translateX(120%);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      pointer-events: auto;
+      max-width: 320px;
+    }
+
+    .toast.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+
+    .toast-icon {
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+
+    .toast-message {
+      font-size: 0.85rem;
+      color: var(--text-primary);
+    }
+
+    .toast.success { border-color: var(--accent-green); }
+    .toast.success .toast-icon { color: var(--accent-green); }
+    .toast.error { border-color: var(--accent-red); }
+    .toast.error .toast-icon { color: var(--accent-red); }
+    .toast.info { border-color: var(--accent-blue); }
+    .toast.info .toast-icon { color: var(--accent-blue); }
+
+    /* ============================================
+       THEME DROPDOWN
+    ============================================ */
+    .theme-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .theme-toggle {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-glow);
+      color: var(--text-primary);
+    }
+
+    .theme-toggle-icon { font-size: 1rem; }
+    .theme-label { font-size: 0.8rem; }
+
+    .theme-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 4px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      min-width: 120px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px);
+      transition: all 0.2s ease;
+    }
+
+    .theme-dropdown.open .theme-menu {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .theme-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    .theme-menu-item:first-child { border-radius: 8px 8px 0 0; }
+    .theme-menu-item:last-child { border-radius: 0 0 8px 8px; }
+
+    .theme-menu-item:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
+
+    .theme-menu-item.active {
+      background: var(--bg-card-hover);
+      color: var(--accent-blue);
+    }
+
+    .theme-menu-item.active::after {
+      content: '✓';
+      margin-left: auto;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+      .theme-label { display: none; }
+    }
+
+    /* ============================================
+       ACCESSIBILITY - FOCUS INDICATORS
+    ============================================ */
+    *:focus-visible {
+      outline: 2px solid var(--accent-blue);
+      outline-offset: 2px;
+    }
+
+    button:focus-visible,
+    .filter-chip:focus-visible,
+    .nav-item:focus-visible,
+    .test-card:focus-visible,
+    .gallery-item:focus-visible {
+      outline: 2px solid var(--accent-blue);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px rgba(0, 170, 255, 0.2);
+    }
+
+    /* Skip to main content link for screen readers */
+    .skip-link {
+      position: absolute;
+      top: -40px;
+      left: 0;
+      background: var(--accent-blue);
+      color: white;
+      padding: 8px 16px;
+      z-index: 10001;
+      text-decoration: none;
+      font-weight: 600;
+      border-radius: 0 0 8px 0;
+      transition: top 0.3s ease;
+    }
+
+    .skip-link:focus {
+      top: 0;
+    }
+
+    /* Visually hidden but accessible to screen readers */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* ============================================
+       EMPTY STATE UI
+    ============================================ */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .empty-state-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+    }
+
+    .empty-state-message {
+      font-size: 0.9rem;
+      max-width: 300px;
+      line-height: 1.5;
+    }
+
+    .empty-state-action {
+      margin-top: 1rem;
+      padding: 8px 16px;
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: background 0.2s ease;
+    }
+
+    .empty-state-action:hover {
+      background: var(--accent-blue-dim);
+    }
+
+    /* ============================================
+       MOBILE RESPONSIVE - PERSISTENT SIDEBAR
+    ============================================ */
+    @media (max-width: 768px) {
+      :root {
+        --sidebar-width: 200px;
+      }
+
+      .app-shell {
+        grid-template-columns: var(--sidebar-width) 1fr;
+      }
+
+      .app-shell.sidebar-collapsed {
+        grid-template-columns: 0 1fr;
+      }
+
+      .app-shell.sidebar-collapsed .sidebar {
+        transform: translateX(-100%);
+      }
+
+      .sidebar {
+        width: var(--sidebar-width);
+      }
+
+      /* Hide overlay on mobile - sidebar is persistent */
+      .sidebar-overlay {
+        display: none;
+      }
+
+      .top-bar-left .breadcrumbs {
+        display: none;
+      }
+
+      .search-label, .btn-label, .search-kbd {
+        display: none;
+      }
+
+      .filter-chips {
+        flex-wrap: wrap;
+      }
+
+      /* Compact sidebar elements */
+      .sidebar-progress {
+        padding: 0.75rem;
+      }
+
+      .progress-ring-container {
+        width: 60px;
+        height: 60px;
+      }
+
+      .progress-ring {
+        width: 60px;
+        height: 60px;
+      }
+
+      .progress-ring circle {
+        cx: 30;
+        cy: 30;
+        r: 25;
+      }
+
+      .progress-ring-value {
+        font-size: 0.9rem;
+      }
+
+      .nav-item {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.8rem;
+      }
+
+      .nav-icon {
+        font-size: 0.9rem;
+      }
+
+      .mini-stat {
+        padding: 0.4rem;
+      }
+
+      .mini-stat-value {
+        font-size: 0.85rem;
+      }
+
+      .mini-stat-label {
+        font-size: 0.55rem;
+      }
+    }
+
+    /* ============================================
+       SMOOTH TRANSITIONS
+    ============================================ */
+    .test-card,
+    .gallery-item,
+    .nav-item,
+    .filter-chip,
+    .sidebar,
+    .main-panel {
+      transition: all 0.2s ease;
+    }
+
+    .view-panel {
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .test-card-details {
+      animation: slideDown 0.2s ease;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; max-height: 0; }
+      to { opacity: 1; max-height: 2000px; }
+    }
+
+    /* ============================================
+       PRINT STYLESHEET
+    ============================================ */
+    @media print {
+      body {
+        background: white;
+        color: black;
+        overflow: visible;
+        height: auto;
+      }
+
+      .app-shell {
+        display: block;
+      }
+
+      .sidebar,
+      .top-bar,
+      .filter-chips,
+      .search-trigger,
+      .theme-toggle,
+      .toast-container,
+      .lightbox {
+        display: none !important;
+      }
+
+      .main-panel {
+        padding: 0;
+        overflow: visible;
+        height: auto;
+      }
+
+      .test-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border: 1px solid #ccc;
+        margin-bottom: 1rem;
+      }
+
+      .test-card-details {
+        display: block !important;
+        max-height: none !important;
+      }
+
+      .view-panel {
+        display: block !important;
+      }
+
+      a {
+        text-decoration: underline;
+      }
+
+      .progress-ring,
+      .trend-section,
+      .gallery-section {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+    }
+
+    /* ============================================
+       CSV EXPORT BUTTON
+    ============================================ */
+    .export-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .export-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 4px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      min-width: 140px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px);
+      transition: all 0.2s ease;
+    }
+
+    .export-dropdown.open .export-menu {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .export-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    .export-menu-item:first-child {
+      border-radius: 8px 8px 0 0;
+    }
+
+    .export-menu-item:last-child {
+      border-radius: 0 0 8px 8px;
+    }
+
+    .export-menu-item:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
 `;
 }
 
@@ -4511,13 +5232,21 @@ function generateScripts(
     ============================================ */
 
     function toggleSidebar() {
-      document.querySelector('.app-shell').classList.toggle('sidebar-collapsed');
+      const appShell = document.querySelector('.app-shell');
+      const toggleBtn = document.querySelector('.sidebar-toggle');
+
+      // Same collapse behavior for all screen sizes
+      appShell.classList.toggle('sidebar-collapsed');
+      const isExpanded = !appShell.classList.contains('sidebar-collapsed');
+      if (toggleBtn) toggleBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
     }
 
     function switchView(view) {
-      // Update nav items
+      // Update nav items and ARIA states
       document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.toggle('active', item.dataset.view === view);
+        const isActive = item.dataset.view === view;
+        item.classList.toggle('active', isActive);
+        item.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
 
       // Hide all view panels
@@ -4679,9 +5408,11 @@ function generateScripts(
     }
 
     function switchTestTab(tab) {
-      // Update tab buttons
+      // Update tab buttons and ARIA states
       document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tab);
+        const isActive = btn.dataset.tab === tab;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
 
       // Hide all tab content
@@ -4815,6 +5546,27 @@ function generateScripts(
       });
     }
 
+    function filterByStatus(status) {
+      // Switch to tests view first
+      switchView('tests');
+
+      // Clear all filters and activate the matching status filter
+      document.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.classList.remove('active');
+        chip.setAttribute('aria-pressed', 'false');
+      });
+
+      // Find and activate the matching status filter chip
+      const statusChip = document.querySelector('.filter-chip[data-filter="' + status + '"]');
+      if (statusChip) {
+        statusChip.classList.add('active');
+        statusChip.setAttribute('aria-pressed', 'true');
+      }
+
+      // Apply filter to test cards and list items
+      applyFilters();
+    }
+
     /* ============================================
        SEARCH FUNCTIONALITY
     ============================================ */
@@ -4822,12 +5574,14 @@ function generateScripts(
     function openSearch() {
       const modal = document.getElementById('search-modal');
       modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
       document.getElementById('search-modal-input').focus();
     }
 
     function closeSearch() {
       const modal = document.getElementById('search-modal');
       modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
       document.getElementById('search-modal-input').value = '';
       document.getElementById('search-modal-results').innerHTML = '';
     }
@@ -4897,6 +5651,9 @@ function generateScripts(
         );
         group.style.display = hasVisible ? 'block' : 'none';
       });
+
+      // Check for empty state
+      checkEmptyState();
     }
 
     // Active filters state - organized by group
@@ -4915,9 +5672,11 @@ function generateScripts(
       if (activeFilters[group].has(filter)) {
         activeFilters[group].delete(filter);
         chip.classList.remove('active');
+        chip.setAttribute('aria-pressed', 'false');
       } else {
         activeFilters[group].add(filter);
         chip.classList.add('active');
+        chip.setAttribute('aria-pressed', 'true');
       }
 
       applyFilters();
@@ -4930,6 +5689,7 @@ function generateScripts(
       activeFilters.grade.clear();
       document.querySelectorAll('.filter-chip').forEach(chip => {
         chip.classList.remove('active');
+        chip.setAttribute('aria-pressed', 'false');
       });
       applyFilters();
     }
@@ -5070,6 +5830,23 @@ function generateScripts(
       document.querySelectorAll('.file-tree-item').forEach(item => {
         item.classList.remove('active');
       });
+
+      // Check for empty state
+      checkEmptyState();
+    }
+
+    function checkEmptyState() {
+      const visibleItems = document.querySelectorAll('.test-list-item:not([style*="display: none"])');
+      const emptyState = document.getElementById('emptyState');
+      const tabs = document.querySelectorAll('.test-tab-content');
+
+      if (visibleItems.length === 0) {
+        emptyState.style.display = 'flex';
+        tabs.forEach(tab => tab.style.opacity = '0.3');
+      } else {
+        emptyState.style.display = 'none';
+        tabs.forEach(tab => tab.style.opacity = '1');
+      }
     }
 
     // Legacy single-filter function for backward compatibility
@@ -5201,12 +5978,14 @@ function generateScripts(
       navigator.clipboard.writeText(text).then(() => {
         btn.textContent = 'Copied!';
         btn.classList.add('copied');
+        showToast('Copied to clipboard', 'success');
         setTimeout(() => {
           btn.textContent = 'Copy';
           btn.classList.remove('copied');
         }, 2000);
       }).catch(() => {
         btn.textContent = 'Failed';
+        showToast('Failed to copy', 'error');
         setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
       });
     }
@@ -5232,7 +6011,165 @@ function generateScripts(
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showToast('JSON exported successfully', 'success');
+      closeExportMenu();
     }
+
+    // CSV Export
+    function exportCSV() {
+      const headers = ['Title', 'File', 'Status', 'Duration (ms)', 'Flakiness Score', 'Stability Grade', 'Retries'];
+      const rows = tests.map(t => [
+        '"' + (t.title || '').replace(/"/g, '""') + '"',
+        '"' + (t.file || '').replace(/"/g, '""') + '"',
+        t.status || '',
+        t.duration || 0,
+        t.flakinessScore || '',
+        t.stabilityScore?.grade || '',
+        t.retry || 0
+      ]);
+
+      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'test-results-' + new Date().toISOString().split('T')[0] + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('CSV exported successfully', 'success');
+      closeExportMenu();
+    }
+
+    // Export menu toggle
+    function toggleExportMenu() {
+      const dropdown = document.getElementById('exportDropdown');
+      const btn = dropdown.querySelector('.top-bar-btn');
+      dropdown.classList.toggle('open');
+      btn.setAttribute('aria-expanded', dropdown.classList.contains('open'));
+    }
+
+    function closeExportMenu() {
+      const dropdown = document.getElementById('exportDropdown');
+      const btn = dropdown.querySelector('.top-bar-btn');
+      dropdown.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    // Close export menu when clicking outside
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('exportDropdown');
+      if (dropdown && !dropdown.contains(e.target)) {
+        closeExportMenu();
+      }
+    });
+
+    // Toast notifications
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+
+      const icons = { success: '✓', error: '✗', info: 'ℹ' };
+      toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span><span class="toast-message">' + message + '</span>';
+
+      container.appendChild(toast);
+
+      // Trigger animation
+      requestAnimationFrame(() => {
+        toast.classList.add('show');
+      });
+
+      // Remove after delay
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // Theme dropdown menu
+    function toggleThemeMenu() {
+      const dropdown = document.getElementById('themeDropdown');
+      const btn = dropdown.querySelector('.theme-toggle');
+      dropdown.classList.toggle('open');
+      btn.setAttribute('aria-expanded', dropdown.classList.contains('open'));
+    }
+
+    function closeThemeMenu() {
+      const dropdown = document.getElementById('themeDropdown');
+      const btn = dropdown.querySelector('.theme-toggle');
+      dropdown.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    // Close theme menu when clicking outside
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('themeDropdown');
+      if (dropdown && !dropdown.contains(e.target)) {
+        closeThemeMenu();
+      }
+    });
+
+    function setTheme(theme) {
+      const root = document.documentElement;
+      const icon = document.getElementById('themeIcon');
+      const label = document.getElementById('themeLabel');
+
+      // Update active state in menu
+      document.querySelectorAll('.theme-menu-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.theme === theme);
+      });
+
+      if (theme === 'light') {
+        root.setAttribute('data-theme', 'light');
+        icon.textContent = '☀️';
+        label.textContent = 'Light';
+        localStorage.setItem('theme', 'light');
+        showToast('Light theme', 'info');
+      } else if (theme === 'dark') {
+        root.setAttribute('data-theme', 'dark');
+        icon.textContent = '🌙';
+        label.textContent = 'Dark';
+        localStorage.setItem('theme', 'dark');
+        showToast('Dark theme', 'info');
+      } else {
+        // System/auto
+        root.removeAttribute('data-theme');
+        icon.textContent = '💻';
+        label.textContent = 'System';
+        localStorage.setItem('theme', 'system');
+        showToast('Using system theme', 'info');
+      }
+
+      closeThemeMenu();
+    }
+
+    // Initialize theme from localStorage
+    (function initTheme() {
+      const saved = localStorage.getItem('theme') || 'system';
+      const icon = document.getElementById('themeIcon');
+      const label = document.getElementById('themeLabel');
+
+      // Update active state in menu
+      document.querySelectorAll('.theme-menu-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.theme === saved);
+      });
+
+      if (saved === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+        if (icon) icon.textContent = '☀️';
+        if (label) label.textContent = 'Light';
+      } else if (saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        if (icon) icon.textContent = '🌙';
+        if (label) label.textContent = 'Dark';
+      } else {
+        // System - CSS handles via prefers-color-scheme
+        if (icon) icon.textContent = '💻';
+        if (label) label.textContent = 'System';
+      }
+    })();
 
     // Auto-scroll secondary charts to show most recent run
     function scrollChartsToRight() {
@@ -5252,7 +6189,7 @@ function generateScripts(
 
 	    function formatDurationMs(ms) {
 	      const n = Number(ms) || 0;
-	      if (n < 1000) return n + 'ms';
+	      if (n < 1000) return Math.round(n) + 'ms';
 	      if (n < 60000) return (n / 1000).toFixed(1) + 's';
 	      return (n / 60000).toFixed(1) + 'm';
 	    }
