@@ -502,9 +502,23 @@ ${generateStyles(passRate, cspSafe)}
             </button>
           </div>
         </div>
-        <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle light/dark theme">
-          <span class="theme-toggle-icon" id="themeIcon">🌙</span>
-        </button>
+        <div class="theme-dropdown" id="themeDropdown">
+          <button class="theme-toggle" onclick="toggleThemeMenu()" title="Theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false">
+            <span class="theme-toggle-icon" id="themeIcon">🌙</span>
+            <span class="theme-label" id="themeLabel">Dark</span>
+          </button>
+          <div class="theme-menu" role="menu">
+            <button class="theme-menu-item" onclick="setTheme('system')" role="menuitem" data-theme="system">
+              <span>💻</span> System
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('light')" role="menuitem" data-theme="light">
+              <span>☀️</span> Light
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('dark')" role="menuitem" data-theme="dark">
+              <span>🌙</span> Dark
+            </button>
+          </div>
+        </div>
         <div class="timestamp">${new Date().toLocaleString()}</div>
       </div>
     </header>
@@ -4638,8 +4652,13 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     .toast.info .toast-icon { color: var(--accent-blue); }
 
     /* ============================================
-       THEME TOGGLE
+       THEME DROPDOWN
     ============================================ */
+    .theme-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
     .theme-toggle {
       background: var(--bg-card);
       border: 1px solid var(--border-subtle);
@@ -4647,7 +4666,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       padding: 6px 10px;
       cursor: pointer;
       color: var(--text-secondary);
-      font-size: 1rem;
+      font-size: 0.85rem;
       transition: all 0.2s ease;
       display: flex;
       align-items: center;
@@ -4661,6 +4680,68 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     }
 
     .theme-toggle-icon { font-size: 1rem; }
+    .theme-label { font-size: 0.8rem; }
+
+    .theme-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 4px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      min-width: 120px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px);
+      transition: all 0.2s ease;
+    }
+
+    .theme-dropdown.open .theme-menu {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .theme-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    .theme-menu-item:first-child { border-radius: 8px 8px 0 0; }
+    .theme-menu-item:last-child { border-radius: 0 0 8px 8px; }
+
+    .theme-menu-item:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
+
+    .theme-menu-item.active {
+      background: var(--bg-card-hover);
+      color: var(--accent-blue);
+    }
+
+    .theme-menu-item.active::after {
+      content: '✓';
+      margin-left: auto;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+      .theme-label { display: none; }
+    }
 
     /* ============================================
        ACCESSIBILITY - FOCUS INDICATORS
@@ -5812,42 +5893,87 @@ function generateScripts(
       }, 3000);
     }
 
-    // Theme toggle
-    function toggleTheme() {
-      const root = document.documentElement;
-      const currentTheme = root.getAttribute('data-theme');
-      const icon = document.getElementById('themeIcon');
+    // Theme dropdown menu
+    function toggleThemeMenu() {
+      const dropdown = document.getElementById('themeDropdown');
+      const btn = dropdown.querySelector('.theme-toggle');
+      dropdown.classList.toggle('open');
+      btn.setAttribute('aria-expanded', dropdown.classList.contains('open'));
+    }
 
-      if (currentTheme === 'dark') {
+    function closeThemeMenu() {
+      const dropdown = document.getElementById('themeDropdown');
+      const btn = dropdown.querySelector('.theme-toggle');
+      dropdown.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    // Close theme menu when clicking outside
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('themeDropdown');
+      if (dropdown && !dropdown.contains(e.target)) {
+        closeThemeMenu();
+      }
+    });
+
+    function setTheme(theme) {
+      const root = document.documentElement;
+      const icon = document.getElementById('themeIcon');
+      const label = document.getElementById('themeLabel');
+
+      // Update active state in menu
+      document.querySelectorAll('.theme-menu-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.theme === theme);
+      });
+
+      if (theme === 'light') {
         root.setAttribute('data-theme', 'light');
         icon.textContent = '☀️';
+        label.textContent = 'Light';
         localStorage.setItem('theme', 'light');
-        showToast('Light theme enabled', 'info');
-      } else if (currentTheme === 'light') {
-        root.removeAttribute('data-theme');
-        icon.textContent = '🌙';
-        localStorage.setItem('theme', 'auto');
-        showToast('Using system theme', 'info');
-      } else {
+        showToast('Light theme', 'info');
+      } else if (theme === 'dark') {
         root.setAttribute('data-theme', 'dark');
         icon.textContent = '🌙';
+        label.textContent = 'Dark';
         localStorage.setItem('theme', 'dark');
-        showToast('Dark theme enabled', 'info');
+        showToast('Dark theme', 'info');
+      } else {
+        // System/auto
+        root.removeAttribute('data-theme');
+        icon.textContent = '💻';
+        label.textContent = 'System';
+        localStorage.setItem('theme', 'system');
+        showToast('Using system theme', 'info');
       }
+
+      closeThemeMenu();
     }
 
     // Initialize theme from localStorage
     (function initTheme() {
-      const saved = localStorage.getItem('theme');
+      const saved = localStorage.getItem('theme') || 'system';
       const icon = document.getElementById('themeIcon');
+      const label = document.getElementById('themeLabel');
+
+      // Update active state in menu
+      document.querySelectorAll('.theme-menu-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.theme === saved);
+      });
+
       if (saved === 'light') {
         document.documentElement.setAttribute('data-theme', 'light');
         if (icon) icon.textContent = '☀️';
+        if (label) label.textContent = 'Light';
       } else if (saved === 'dark') {
         document.documentElement.setAttribute('data-theme', 'dark');
         if (icon) icon.textContent = '🌙';
+        if (label) label.textContent = 'Dark';
+      } else {
+        // System - CSS handles via prefers-color-scheme
+        if (icon) icon.textContent = '💻';
+        if (label) label.textContent = 'System';
       }
-      // 'auto' or no setting: use system preference (handled by CSS)
     })();
 
     // Auto-scroll secondary charts to show most recent run
