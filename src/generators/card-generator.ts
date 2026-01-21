@@ -2,7 +2,7 @@
  * Card Generator - Handles test card and test detail generation
  */
 
-import type { TestResultData } from '../types';
+import type { TestResultData, NetworkLogData, NetworkLogEntry } from '../types';
 import { formatDuration, escapeHtml, sanitizeId, renderMarkdownLite } from '../utils';
 
 /**
@@ -37,6 +37,21 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
     else stabilityClass = 'stability-low';
   }
 
+  // Prepare tags and suite data attributes
+  const tagsAttr = test.tags && test.tags.length > 0 ? ` data-tags="${test.tags.map(t => escapeHtml(t)).join(',')}"` : '';
+  const suiteAttr = test.suite ? ` data-suite="${escapeHtml(test.suite)}"` : '';
+  const suitesAttr = test.suites && test.suites.length > 0 ? ` data-suites="${test.suites.map(s => escapeHtml(s)).join(',')}"` : '';
+
+  // Generate tags display
+  const tagsHtml = test.tags && test.tags.length > 0
+    ? `<div class="test-tags">${test.tags.map(t => `<span class="test-tag">${escapeHtml(t)}</span>`).join('')}</div>`
+    : '';
+
+  // Generate suite badge display
+  const suiteHtml = test.suite
+    ? `<span class="test-suite-badge" title="Suite: ${test.suites?.map(s => escapeHtml(s)).join(' > ') || escapeHtml(test.suite)}">${escapeHtml(test.suite)}</span>`
+    : '';
+
   return `
     <div id="card-${cardId}" class="test-card"
          data-status="${test.status}"
@@ -44,13 +59,19 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
          data-unstable="${isUnstable}"
          data-slow="${isSlow}"
          data-new="${isNew}"
-         data-grade="${test.stabilityScore?.grade || ''}">
-      <div class="test-card-header" ${hasDetails ? `onclick="toggleDetails('${cardId}')"` : ''}>
+         data-grade="${test.stabilityScore?.grade || ''}"${tagsAttr}${suiteAttr}${suitesAttr}>
+      <div class="test-card-header" ${hasDetails ? `onclick="toggleDetails('${cardId}', event)"` : ''}>
         <div class="test-card-left">
           <div class="status-indicator ${test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed'}"></div>
           <div class="test-info">
-            <div class="test-title">${escapeHtml(test.title)}</div>
-            <div class="test-file">${escapeHtml(test.file)}</div>
+            <div class="test-title-row">
+              <span class="test-title">${escapeHtml(test.title)}</span>
+              ${suiteHtml}
+            </div>
+            <div class="test-meta-row">
+              <span class="test-file">${escapeHtml(test.file)}</span>
+              ${tagsHtml}
+            </div>
           </div>
         </div>
         <div class="test-card-right">
@@ -154,6 +175,11 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
         </div>
       </div>
     `;
+  }
+
+  // Network logs section (extracted from trace files)
+  if (test.networkLogs && test.networkLogs.entries.length > 0) {
+    bodyDetails += generateNetworkLogsSection(test.networkLogs, cardId);
   }
 
   if (test.error) {
@@ -352,4 +378,135 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
     </div>
   `;
   }).join('\n');
+}
+
+/**
+ * Generate network logs section for test details
+ */
+function generateNetworkLogsSection(networkLogs: NetworkLogData, cardId: string): string {
+  const { entries, summary } = networkLogs;
+
+  // Summary stats
+  const totalRequests = entries.length;
+  const errorCount = summary.errors.length;
+  const slowestEntry = summary.slowest;
+
+  // Status breakdown
+  const statusBreakdown = Object.entries(summary.byStatus)
+    .map(([status, count]) => {
+      const statusClass = parseInt(status) >= 400 ? 'error' : parseInt(status) >= 300 ? 'redirect' : 'success';
+      return `<span class="network-status-badge ${statusClass}">${status}xx: ${count}</span>`;
+    })
+    .join('');
+
+  // Generate entries HTML
+  const entriesHtml = entries.map((entry, idx) => {
+    const statusClass = entry.status >= 400 ? 'error' : entry.status >= 300 ? 'redirect' : 'success';
+    const isSlowRequest = entry.duration > 1000;
+    const entryId = `${cardId}-network-${idx}`;
+
+    // Format URL for display (truncate if too long)
+    const displayUrl = entry.urlPath.length > 60
+      ? entry.urlPath.substring(0, 57) + '...'
+      : entry.urlPath;
+
+    // Timing waterfall bars
+    let timingBars = '';
+    if (entry.timings) {
+      const totalTime = entry.duration || 1;
+      const timingParts = [
+        { name: 'DNS', value: entry.timings.dns, color: '#6366f1' },
+        { name: 'Connect', value: entry.timings.connect, color: '#f59e0b' },
+        { name: 'SSL', value: entry.timings.ssl, color: '#8b5cf6' },
+        { name: 'Wait', value: entry.timings.wait, color: '#10b981' },
+        { name: 'Receive', value: entry.timings.receive, color: '#3b82f6' },
+      ].filter(t => t.value > 0);
+
+      if (timingParts.length > 0) {
+        timingBars = `
+          <div class="network-timing-bar">
+            ${timingParts.map(t => {
+              const width = Math.max(2, (t.value / totalTime) * 100);
+              return `<div class="timing-segment" style="width: ${width.toFixed(1)}%; background: ${t.color};" title="${t.name}: ${t.value}ms"></div>`;
+            }).join('')}
+          </div>
+        `;
+      }
+    }
+
+    // Request body preview (if JSON)
+    let requestBodyHtml = '';
+    if (entry.requestBody) {
+      const bodyStr = typeof entry.requestBody === 'string'
+        ? entry.requestBody
+        : JSON.stringify(entry.requestBody, null, 2);
+      const truncated = bodyStr.length > 500 ? bodyStr.substring(0, 500) + '...' : bodyStr;
+      requestBodyHtml = `
+        <div class="network-body request-body">
+          <div class="network-body-label">Request Body:</div>
+          <pre class="network-body-content">${escapeHtml(truncated)}</pre>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="network-entry ${statusClass}" data-entry-id="${entryId}">
+        <div class="network-entry-header" onclick="toggleNetworkEntry('${entryId}')">
+          <span class="network-method ${entry.method.toLowerCase()}">${entry.method}</span>
+          <span class="network-url" title="${escapeHtml(entry.url)}">${escapeHtml(displayUrl)}</span>
+          <span class="network-status ${statusClass}">${entry.status}</span>
+          <span class="network-duration ${isSlowRequest ? 'slow' : ''}">${entry.duration}ms</span>
+          <span class="network-size">${formatBytes(entry.responseSize)}</span>
+          <span class="network-expand-icon">▶</span>
+        </div>
+        <div class="network-entry-details" id="${entryId}-details" style="display: none;">
+          ${timingBars}
+          <div class="network-meta">
+            <div class="network-meta-item">
+              <span class="meta-label">Content-Type:</span>
+              <span class="meta-value">${escapeHtml(entry.contentType || 'unknown')}</span>
+            </div>
+            <div class="network-meta-item">
+              <span class="meta-label">Request Size:</span>
+              <span class="meta-value">${formatBytes(entry.requestSize)}</span>
+            </div>
+            <div class="network-meta-item">
+              <span class="meta-label">Response Size:</span>
+              <span class="meta-value">${formatBytes(entry.responseSize)}</span>
+            </div>
+          </div>
+          ${requestBodyHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="detail-section network-logs-section">
+      <div class="detail-label">
+        <span class="icon">🌐</span> Network Logs
+        <span class="network-summary">
+          ${totalRequests} requests
+          ${errorCount > 0 ? `<span class="network-error-count">${errorCount} errors</span>` : ''}
+          ${slowestEntry ? `<span class="network-slowest">slowest: ${slowestEntry.duration}ms</span>` : ''}
+        </span>
+      </div>
+      <div class="network-status-summary">
+        ${statusBreakdown}
+      </div>
+      <div class="network-entries">
+        ${entriesHtml}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Format bytes to human readable string
+ */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

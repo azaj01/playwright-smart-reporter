@@ -8,8 +8,8 @@ import { renderMarkdownLite } from '../utils';
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
@@ -32,6 +32,10 @@ export class HistoryCollector {
       stabilityThreshold: options.stabilityThreshold ?? 70,
       retryFailureThreshold: options.retryFailureThreshold ?? 3,
       cspSafe: options.cspSafe ?? false,
+      enableNetworkLogs: options.enableNetworkLogs ?? true,
+      networkLogFilter: options.networkLogFilter ?? undefined,
+      networkLogExcludeAssets: options.networkLogExcludeAssets ?? true,
+      networkLogMaxEntries: options.networkLogMaxEntries ?? 50,
       slackWebhook: options.slackWebhook,
       teamsWebhook: options.teamsWebhook,
       baselineRunId: options.baselineRunId,

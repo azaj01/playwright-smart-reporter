@@ -28,6 +28,7 @@ An intelligent Playwright HTML reporter with AI-powered failure analysis, flakin
 ### Test Details
 - **Pass Rate Trend Chart** - Visual graph showing pass rates across runs
 - **Step Timing Breakdown** - See which steps are slowest with visual bars
+- **Network Logs** - View API calls with status codes, timing, and payload details
 - **Screenshot Embedding** - Failure screenshots displayed inline
 - **Video Links** - Quick access to test recordings
 - **One-Click Trace Viewing** - Opens trace in Playwright's trace viewer
@@ -117,6 +118,7 @@ export default defineConfig({
       enableAIRecommendations: true,
       enableTraceViewer: true,
       enableHistoryDrilldown: true,
+      enableNetworkLogs: true,
       stabilityThreshold: 70,
       retryFailureThreshold: 3,
       baselineRunId: 'main-branch-baseline', // optional
@@ -143,6 +145,9 @@ export default defineConfig({
 | `enableAIRecommendations` | `true` | Generate AI-powered recommendations |
 | `enableTraceViewer` | `true` | Enable "View Trace" actions |
 | `enableHistoryDrilldown` | `true` | Store per-run snapshots for historical navigation |
+| `enableNetworkLogs` | `true` | Extract and display network requests from traces |
+| `networkLogExcludeAssets` | `true` | Exclude static assets (images, fonts, CSS, JS) |
+| `networkLogMaxEntries` | `50` | Maximum network entries to display per test |
 | `stabilityThreshold` | `70` | Minimum stability score (C grade) to avoid warnings |
 | `retryFailureThreshold` | `3` | Number of retries before flagging as problematic |
 | `baselineRunId` | - | Optional: Run ID to use as baseline for comparisons |
@@ -183,10 +188,13 @@ Browse and filter all tests with powerful filtering options:
 - **Health Filters** - Flaky, Slow, New
 - **Grade Filters** - Filter by stability grade (A, B, C, D, F)
 - **Attention Filters** - New Failures, Regressions, Fixed
+- **Suite Filters** - Filter by test suite (from `test.describe()` blocks)
+- **Tag Filters** - Filter by tags (from annotations like `@smoke`, `@critical`)
 - **Search** - Find tests by name
 
 Each test card shows:
 - Status indicator and test name
+- Suite badge and tags (if applicable)
 - Duration and stability grade
 - Flakiness indicator and performance trend
 - History dots (clickable for historical view)
@@ -252,6 +260,48 @@ To open a trace directly in Playwright's Trace Viewer:
 
 ```bash
 npx playwright-smart-reporter-view-trace ./traces/<trace>.zip
+```
+
+## Network Logs
+
+Network requests are automatically extracted from Playwright trace files - no code changes required. Each test displays an expandable "Network Logs" section showing:
+
+- **Method & URL** - HTTP method and request URL
+- **Status Code** - Response status with color coding (green for 2xx, yellow for 3xx, red for 4xx/5xx)
+- **Duration** - Request timing with visual waterfall
+- **Size** - Request and response payload sizes
+
+Expand individual entries to see:
+- Request/response headers
+- Request body (for POST/PUT/PATCH requests)
+- Detailed timing breakdown (DNS, connect, SSL, wait, receive)
+
+### Configuration
+
+```typescript
+reporter: [
+  ['playwright-smart-reporter', {
+    // Network logging is enabled by default
+    enableNetworkLogs: true,
+
+    // Exclude static assets (images, fonts, CSS, JS) - default: true
+    networkLogExcludeAssets: false,  // Set to false to show all requests
+
+    // Maximum entries per test - default: 50
+    networkLogMaxEntries: 30,
+  }],
+]
+```
+
+### Requirements
+
+Network logs require trace files to be available. Ensure your Playwright config enables tracing:
+
+```typescript
+// playwright.config.ts
+use: {
+  trace: 'retain-on-failure',  // or 'on' to always capture
+}
 ```
 
 ## CI Integration

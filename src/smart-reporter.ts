@@ -36,6 +36,7 @@ import {
   HistoryCollector,
   StepCollector,
   AttachmentCollector,
+  NetworkCollector,
 } from './collectors';
 
 // ============================================================================
@@ -79,6 +80,7 @@ class SmartReporter implements Reporter {
   private historyCollector!: HistoryCollector;
   private stepCollector: StepCollector;
   private attachmentCollector: AttachmentCollector;
+  private networkCollector: NetworkCollector;
 
   // Analyzers
   private flakinessAnalyzer!: FlakinessAnalyzer;
@@ -106,6 +108,13 @@ class SmartReporter implements Reporter {
     // Initialize collectors (attachment collector will be re-initialized in onBegin with outputDir)
     this.stepCollector = new StepCollector();
     this.attachmentCollector = new AttachmentCollector();
+
+    // Note: NetworkCollector is initialized in onBegin when we have access to full config
+    this.networkCollector = new NetworkCollector({
+      excludeStaticAssets: false,  // Show all network activity by default
+      maxEntries: 30,
+      includeBodies: true,
+    });
 
     // Initialize other components
     this.failureClusterer = new FailureClusterer();
@@ -165,7 +174,7 @@ class SmartReporter implements Reporter {
    * @param test - Playwright test case
    * @param result - Test execution result
    */
-  onTestEnd(test: TestCase, result: TestResult): void {
+  async onTestEnd(test: TestCase, result: TestResult): Promise<void> {
     const testId = this.getTestId(test);
     const file = path.relative(this.outputDir, test.location.file);
 
@@ -173,6 +182,24 @@ class SmartReporter implements Reporter {
     const steps = this.stepCollector.extractSteps(result);
     const attachments = this.attachmentCollector.collectAttachments(result);
     const history = this.historyCollector.getTestHistory(testId);
+
+    // Extract tags from annotations (e.g., @smoke, @critical)
+    const tags = test.annotations
+      .filter(a => a.type === 'tag' || a.type.startsWith('@'))
+      .map(a => a.type.startsWith('@') ? a.type : `@${a.description || a.type}`);
+
+    // Also extract tags from test title (e.g., "Login @smoke @critical")
+    const titleTagMatches = test.title.match(/@[\w-]+/g);
+    if (titleTagMatches) {
+      for (const tag of titleTagMatches) {
+        if (!tags.includes(tag)) tags.push(tag);
+      }
+    }
+
+    // Extract suite hierarchy from titlePath (last element is test title itself)
+    const titlePath = test.titlePath();
+    const suites = titlePath.slice(1, -1); // Remove project name (first) and test title (last)
+    const suite = suites.length > 0 ? suites[suites.length - 1] : undefined;
 
     // Build test result data
     const testData: TestResultData = {
@@ -185,6 +212,9 @@ class SmartReporter implements Reporter {
       steps,
       attachments,
       history,
+      tags: tags.length > 0 ? tags : undefined,
+      suite,
+      suites: suites.length > 0 ? suites : undefined,
     };
 
     // Add error if failed (strip ANSI codes for clean display)
@@ -233,6 +263,17 @@ class SmartReporter implements Reporter {
           testData.traceData = `data:application/zip;base64,${traceBuffer.toString('base64')}`;
         } catch {
           // If we can't read the trace, just use the path
+        }
+      }
+      // Extract network logs from trace (enabled by default when traces exist)
+      if (this.options.enableNetworkLogs !== false) {
+        try {
+          const networkLogs = await this.networkCollector.collectFromTrace(traceAttachment.path);
+          if (networkLogs.entries.length > 0) {
+            testData.networkLogs = networkLogs;
+          }
+        } catch {
+          // Network log extraction is optional, don't fail on errors
         }
       }
     }

@@ -96,6 +96,9 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
            data-fixed="${isFixed}"
            data-file="${escapeHtml(test.file)}"
            data-grade="${test.stabilityScore?.grade || ''}"
+           data-tags="${test.tags?.join(',') || ''}"
+           data-suite="${test.suite || ''}"
+           data-suites="${test.suites?.join(',') || ''}"
            onclick="selectTest('${cardId}')"
            tabindex="0"
            onkeydown="if(event.key==='Enter')selectTest('${cardId}')">
@@ -418,6 +421,23 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const fixedCount = attentionSets.fixed.size;
   const hasAttention = newFailuresCount > 0 || regressionsCount > 0 || fixedCount > 0;
 
+  // Extract unique tags and suites from all tests
+  const allTags = new Map<string, number>(); // tag -> count
+  const allSuites = new Map<string, number>(); // suite -> count
+  for (const r of results) {
+    if (r.tags) {
+      for (const tag of r.tags) {
+        allTags.set(tag, (allTags.get(tag) || 0) + 1);
+      }
+    }
+    if (r.suite) {
+      allSuites.set(r.suite, (allSuites.get(r.suite) || 0) + 1);
+    }
+  }
+  // Sort tags and suites by count (descending)
+  const sortedTags = [...allTags.entries()].sort((a, b) => b[1] - a[1]);
+  const sortedSuites = [...allSuites.entries()].sort((a, b) => b[1] - a[1]);
+
   // Sort results: attention items first (new failures, regressions, fixed), then rest
   const sortedResults = [...results].sort((a, b) => {
     const aIsAttention = attentionSets.newFailures.has(a.testId) || attentionSets.regressions.has(a.testId) || attentionSets.fixed.has(a.testId);
@@ -488,10 +508,9 @@ ${generateStyles(passRate, cspSafe)}
           <span class="hamburger-icon" aria-hidden="true">☰</span>
         </button>
         <div class="logo">
-          <div class="logo-icon">S</div>
           <div class="logo-text">
-            <span class="logo-title">Smart Report</span>
-            <span class="logo-subtitle">playwright test insights</span>
+            <span class="logo-title">StageWright Local</span>
+            <span class="logo-subtitle">Get your test stage right.</span>
           </div>
         </div>
         <nav class="breadcrumbs">
@@ -650,6 +669,26 @@ ${generateStyles(passRate, cspSafe)}
             <button class="filter-chip grade-f" data-filter="grade-f" data-group="grade" onclick="toggleFilter(this)" aria-pressed="false" aria-label="Grade F">F</button>
           </div>
         </div>
+        ${sortedSuites.length > 0 ? `
+        <div class="filter-group" data-group="suite" role="group" aria-label="Suite filters">
+          <div class="filter-group-title" id="suite-filter-label">Suite</div>
+          <div class="filter-chips suite-chips" role="group" aria-labelledby="suite-filter-label">
+            ${sortedSuites.slice(0, 8).map(([suite, count]) =>
+              `<button class="filter-chip suite-chip" data-filter="suite-${escapeHtml(suite)}" data-group="suite" data-suite-name="${escapeHtml(suite)}" onclick="toggleFilter(this)" aria-pressed="false" title="${escapeHtml(suite)} (${count} tests)">${escapeHtml(suite.length > 15 ? suite.slice(0, 12) + '...' : suite)} (${count})</button>`
+            ).join('')}
+          </div>
+        </div>
+        ` : ''}
+        ${sortedTags.length > 0 ? `
+        <div class="filter-group" data-group="tag" role="group" aria-label="Tag filters">
+          <div class="filter-group-title" id="tag-filter-label">Tags</div>
+          <div class="filter-chips tag-chips" role="group" aria-labelledby="tag-filter-label">
+            ${sortedTags.slice(0, 8).map(([tag, count]) =>
+              `<button class="filter-chip tag-chip" data-filter="tag-${escapeHtml(tag)}" data-group="tag" data-tag-name="${escapeHtml(tag)}" onclick="toggleFilter(this)" aria-pressed="false" title="${escapeHtml(tag)} (${count} tests)">${escapeHtml(tag)} (${count})</button>`
+            ).join('')}
+          </div>
+        </div>
+        ` : ''}
       </div>
 
       <!-- File Tree -->
@@ -1053,6 +1092,12 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       font-size: 1rem;
       font-weight: 700;
       color: var(--bg-primary);
+    }
+
+    .logo-icon-img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
     }
 
     .logo-text {
@@ -3507,6 +3552,63 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       color: var(--text-muted);
     }
 
+    .test-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .test-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .test-suite-badge {
+      font-family: ${monoFont};
+      font-size: 0.65rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+    }
+
+    .test-tags {
+      display: flex;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+    }
+
+    .test-tag {
+      font-family: ${monoFont};
+      font-size: 0.6rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      background: var(--accent-blue);
+      color: white;
+      opacity: 0.85;
+    }
+
+    .suite-chips .filter-chip,
+    .tag-chips .filter-chip {
+      background: var(--bg-card);
+    }
+
+    .suite-chips .filter-chip.active {
+      background: var(--accent-purple);
+      color: white;
+      border-color: var(--accent-purple);
+    }
+
+    .tag-chips .filter-chip.active {
+      background: var(--accent-blue);
+      color: white;
+      border-color: var(--accent-blue);
+    }
+
     .test-card-right {
       display: flex;
       align-items: center;
@@ -3783,6 +3885,231 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       color: var(--text-secondary);
       white-space: pre;
       display: block;
+    }
+
+    /* Network Logs Section */
+    .network-logs-section {
+      margin-top: 1rem;
+    }
+
+    .network-logs-section .detail-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .network-summary {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: normal;
+      margin-left: 0.5rem;
+    }
+
+    .network-error-count {
+      color: var(--accent-red);
+      margin-left: 0.5rem;
+    }
+
+    .network-slowest {
+      color: var(--accent-orange);
+      margin-left: 0.5rem;
+    }
+
+    .network-status-summary {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .network-status-badge {
+      font-family: ${monoFont};
+      font-size: 0.7rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .network-status-badge.success { border-color: var(--accent-green); color: var(--accent-green); }
+    .network-status-badge.redirect { border-color: var(--accent-orange); color: var(--accent-orange); }
+    .network-status-badge.error { border-color: var(--accent-red); color: var(--accent-red); }
+
+    .network-entries {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 350px;
+      overflow-y: auto;
+      padding: 2px;
+    }
+
+    .network-entry {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .network-entry.error {
+      border-left: 3px solid var(--accent-red);
+    }
+
+    .network-entry-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      min-height: 36px;
+      box-sizing: border-box;
+    }
+
+    .network-entry-header:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .network-method {
+      font-family: ${monoFont};
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 3px;
+      min-width: 45px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .network-method.get { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+    .network-method.post { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .network-method.put { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+    .network-method.patch { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+    .network-method.delete { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+    .network-url {
+      flex: 1;
+      min-width: 0;
+      font-family: ${monoFont};
+      font-size: 12px;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .network-status {
+      font-family: ${monoFont};
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .network-status.success { color: var(--accent-green); }
+    .network-status.redirect { color: var(--accent-orange); }
+    .network-status.error { color: var(--accent-red); }
+
+    .network-duration {
+      font-family: ${monoFont};
+      font-size: 11px;
+      color: var(--text-muted);
+      min-width: 50px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .network-duration.slow {
+      color: var(--accent-orange);
+    }
+
+    .network-size {
+      font-family: ${monoFont};
+      font-size: 10px;
+      color: var(--text-muted);
+      min-width: 50px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .network-expand-icon {
+      font-size: 10px;
+      color: var(--text-muted);
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .network-entry.expanded .network-expand-icon {
+      transform: rotate(90deg);
+    }
+
+    .network-entry-details {
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .network-timing-bar {
+      display: flex;
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--border-subtle);
+      margin-bottom: 12px;
+    }
+
+    .timing-segment {
+      height: 100%;
+      min-width: 2px;
+    }
+
+    .network-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .network-meta-item {
+      display: flex;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .network-meta-item .meta-label {
+      color: var(--text-muted);
+    }
+
+    .network-meta-item .meta-value {
+      font-family: ${monoFont};
+      color: var(--text-secondary);
+    }
+
+    .network-body {
+      margin-top: 8px;
+    }
+
+    .network-body-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .network-body-content {
+      font-family: ${monoFont};
+      font-size: 11px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 8px;
+      margin: 0;
+      overflow-x: auto;
+      max-height: 150px;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
     .duration-compare {
@@ -5457,12 +5784,18 @@ function generateScripts(
         const clone = cardHtml.cloneNode(true);
         clone.classList.add('expanded');
         clone.style.display = 'block';
-        
+
         // Make sure test-details is visible
         const details = clone.querySelector('.test-details');
         if (details) {
           details.style.display = 'block';
         }
+
+        // Remove expand icon and onclick since card is always expanded in detail panel
+        const expandIcon = clone.querySelector('.expand-icon');
+        if (expandIcon) expandIcon.remove();
+        const header = clone.querySelector('.test-card-header');
+        if (header) header.removeAttribute('onclick');
 
         detailPanel.innerHTML = '';
         detailPanel.appendChild(clone);
@@ -5661,7 +5994,9 @@ function generateScripts(
       attention: new Set(),
       status: new Set(),
       health: new Set(),
-      grade: new Set()
+      grade: new Set(),
+      suite: new Set(),
+      tag: new Set()
     };
 
     function toggleFilter(chip) {
@@ -5687,6 +6022,8 @@ function generateScripts(
       activeFilters.status.clear();
       activeFilters.health.clear();
       activeFilters.grade.clear();
+      activeFilters.suite.clear();
+      activeFilters.tag.clear();
       document.querySelectorAll('.filter-chip').forEach(chip => {
         chip.classList.remove('active');
         chip.setAttribute('aria-pressed', 'false');
@@ -5699,7 +6036,33 @@ function generateScripts(
       const hasStatusFilters = activeFilters.status.size > 0;
       const hasHealthFilters = activeFilters.health.size > 0;
       const hasGradeFilters = activeFilters.grade.size > 0;
-      const hasAnyFilter = hasAttentionFilters || hasStatusFilters || hasHealthFilters || hasGradeFilters;
+      const hasSuiteFilters = activeFilters.suite.size > 0;
+      const hasTagFilters = activeFilters.tag.size > 0;
+      const hasAnyFilter = hasAttentionFilters || hasStatusFilters || hasHealthFilters || hasGradeFilters || hasSuiteFilters || hasTagFilters;
+
+      // Helper to check if element matches suite filter
+      function matchesSuiteFilter(el) {
+        if (!hasSuiteFilters) return true;
+        const suiteData = el.dataset.suite || '';
+        const suitesData = el.dataset.suites || '';
+        for (const filter of activeFilters.suite) {
+          const suiteName = filter.replace('suite-', '');
+          if (suiteData === suiteName || suitesData.split(',').includes(suiteName)) return true;
+        }
+        return false;
+      }
+
+      // Helper to check if element matches tag filter
+      function matchesTagFilter(el) {
+        if (!hasTagFilters) return true;
+        const tagsData = el.dataset.tags || '';
+        const tags = tagsData.split(',').filter(t => t);
+        for (const filter of activeFilters.tag) {
+          const tagName = filter.replace('tag-', '');
+          if (tags.includes(tagName)) return true;
+        }
+        return false;
+      }
 
       // Filter test list items
       document.querySelectorAll('.test-list-item').forEach(item => {
@@ -5726,7 +6089,7 @@ function generateScripts(
 
         // Attention group - OR logic
         if (hasAttentionFilters) {
-          matchesAttention = 
+          matchesAttention =
             (activeFilters.attention.has('new-failure') && isNewFailure) ||
             (activeFilters.attention.has('regression') && isRegression) ||
             (activeFilters.attention.has('fixed') && isFixed);
@@ -5734,7 +6097,7 @@ function generateScripts(
 
         // Status group - OR logic
         if (hasStatusFilters) {
-          matchesStatus = 
+          matchesStatus =
             (activeFilters.status.has('passed') && status === 'passed') ||
             (activeFilters.status.has('failed') && (status === 'failed' || status === 'timedOut')) ||
             (activeFilters.status.has('skipped') && status === 'skipped');
@@ -5742,7 +6105,7 @@ function generateScripts(
 
         // Health group - OR logic
         if (hasHealthFilters) {
-          matchesHealth = 
+          matchesHealth =
             (activeFilters.health.has('flaky') && isFlaky) ||
             (activeFilters.health.has('slow') && isSlow) ||
             (activeFilters.health.has('new') && isNew);
@@ -5750,7 +6113,7 @@ function generateScripts(
 
         // Grade group - OR logic
         if (hasGradeFilters) {
-          matchesGrade = 
+          matchesGrade =
             (activeFilters.grade.has('grade-a') && grade === 'A') ||
             (activeFilters.grade.has('grade-b') && grade === 'B') ||
             (activeFilters.grade.has('grade-c') && grade === 'C') ||
@@ -5758,8 +6121,12 @@ function generateScripts(
             (activeFilters.grade.has('grade-f') && grade === 'F');
         }
 
+        // Suite and Tag groups
+        const matchesSuite = matchesSuiteFilter(item);
+        const matchesTag = matchesTagFilter(item);
+
         // AND between groups
-        const show = matchesAttention && matchesStatus && matchesHealth && matchesGrade;
+        const show = matchesAttention && matchesStatus && matchesHealth && matchesGrade && matchesSuite && matchesTag;
         item.style.display = show ? 'flex' : 'none';
       });
 
@@ -5785,28 +6152,28 @@ function generateScripts(
         let matchesGrade = !hasGradeFilters;
 
         if (hasAttentionFilters) {
-          matchesAttention = 
+          matchesAttention =
             (activeFilters.attention.has('new-failure') && isNewFailure) ||
             (activeFilters.attention.has('regression') && isRegression) ||
             (activeFilters.attention.has('fixed') && isFixed);
         }
 
         if (hasStatusFilters) {
-          matchesStatus = 
+          matchesStatus =
             (activeFilters.status.has('passed') && status === 'passed') ||
             (activeFilters.status.has('failed') && (status === 'failed' || status === 'timedOut')) ||
             (activeFilters.status.has('skipped') && status === 'skipped');
         }
 
         if (hasHealthFilters) {
-          matchesHealth = 
+          matchesHealth =
             (activeFilters.health.has('flaky') && isFlaky) ||
             (activeFilters.health.has('slow') && isSlow) ||
             (activeFilters.health.has('new') && isNew);
         }
 
         if (hasGradeFilters) {
-          matchesGrade = 
+          matchesGrade =
             (activeFilters.grade.has('grade-a') && grade === 'A') ||
             (activeFilters.grade.has('grade-b') && grade === 'B') ||
             (activeFilters.grade.has('grade-c') && grade === 'C') ||
@@ -5814,7 +6181,11 @@ function generateScripts(
             (activeFilters.grade.has('grade-f') && grade === 'F');
         }
 
-        const show = matchesAttention && matchesStatus && matchesHealth && matchesGrade;
+        // Suite and Tag groups
+        const matchesSuite = matchesSuiteFilter(card);
+        const matchesTag = matchesTagFilter(card);
+
+        const show = matchesAttention && matchesStatus && matchesHealth && matchesGrade && matchesSuite && matchesTag;
         card.style.display = show ? 'block' : 'none';
       });
 
@@ -5851,6 +6222,7 @@ function generateScripts(
 
     // Legacy single-filter function for backward compatibility
     function filterTests(filter) {
+      switchView('tests');
       clearAllFilters();
       if (filter !== 'all') {
         const chip = document.querySelector('.filter-chip[data-filter="' + filter + '"]');
@@ -5953,9 +6325,19 @@ function generateScripts(
        EXISTING FUNCTIONS (preserved)
     ============================================ */
 
-    function toggleDetails(id) {
-      const card = document.getElementById('card-' + id);
-      card.classList.toggle('expanded');
+    function toggleDetails(id, event) {
+      // If called from click event, find the parent card from the clicked element
+      // This handles cloned cards in the detail panel that share the same ID
+      let card;
+      if (event && event.currentTarget) {
+        card = event.currentTarget.closest('.test-card');
+      }
+      if (!card) {
+        card = document.getElementById('card-' + id);
+      }
+      if (card) {
+        card.classList.toggle('expanded');
+      }
     }
 
     function toggleGroup(groupId) {
@@ -5967,6 +6349,15 @@ function generateScripts(
       const section = document.getElementById(sectionId);
       if (section) {
         section.classList.toggle('collapsed');
+      }
+    }
+
+    function toggleNetworkEntry(entryId) {
+      const entry = document.querySelector('[data-entry-id="' + entryId + '"]');
+      const details = document.getElementById(entryId + '-details');
+      if (entry && details) {
+        entry.classList.toggle('expanded');
+        details.style.display = details.style.display === 'none' ? 'block' : 'none';
       }
     }
 

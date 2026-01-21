@@ -33,6 +33,12 @@ export interface SmartReporterOptions {
 
   // CSP Compliance - Use system fonts and avoid base64 data URIs
   cspSafe?: boolean;               // Default: false (for backwards compatibility)
+
+  // NEW: Network Logging (extracted from trace files)
+  enableNetworkLogs?: boolean;     // Default: true (when traces exist)
+  networkLogFilter?: string;       // Only show URLs containing this string
+  networkLogExcludeAssets?: boolean; // Exclude static assets (default: true)
+  networkLogMaxEntries?: number;   // Max entries per test (default: 50)
 }
 
 // ============================================================================
@@ -136,12 +142,18 @@ export interface TestResultData {
   traceData?: string;      // NEW: Base64 encoded trace data
   history: TestHistoryEntry[];
 
+  // NEW: Tag/Suite filtering
+  tags?: string[];           // Tags from annotations (e.g., '@smoke', '@critical')
+  suite?: string;            // Direct parent suite name
+  suites?: string[];         // Full suite hierarchy (e.g., ['Auth', 'Login'])
+
   // NEW: Enhanced data
   retryInfo?: RetryInfo;
   failureCluster?: FailureCluster;
   stabilityScore?: StabilityScore;
   attachments?: AttachmentData;
   performanceMetrics?: PerformanceMetrics;
+  networkLogs?: NetworkLogData;        // NEW: Network logs from trace
 }
 
 // NEW: Retry Analysis
@@ -226,6 +238,43 @@ export interface GalleryItem {
   dataUri?: string;           // For screenshots
   videoPath?: string;         // For videos
   tracePath?: string;         // For traces
+}
+
+// NEW: Network Logging (extracted from trace files)
+export interface NetworkLogEntry {
+  method: string;
+  url: string;
+  urlPath: string;            // Just the path portion for display
+  status: number;
+  statusText: string;
+  duration: number;           // Total time in ms
+  timestamp: string;
+  contentType?: string;
+  requestSize: number;
+  responseSize: number;
+  timings?: {
+    dns: number;
+    connect: number;
+    ssl: number;
+    wait: number;             // Time to first byte
+    receive: number;
+  };
+  requestHeaders?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
+  requestBody?: any;
+  responseBody?: any;
+}
+
+export interface NetworkLogData {
+  entries: NetworkLogEntry[];
+  totalRequests: number;
+  totalDuration: number;
+  summary: {
+    byStatus: Record<number, number>;   // e.g., { 200: 5, 400: 1 }
+    byMethod: Record<string, number>;   // e.g., { GET: 3, POST: 2 }
+    slowest: NetworkLogEntry | null;
+    errors: NetworkLogEntry[];          // Status >= 400
+  };
 }
 
 // ============================================================================
