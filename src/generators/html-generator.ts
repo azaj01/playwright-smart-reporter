@@ -389,7 +389,7 @@ export function generateHtml(data: HtmlGeneratorData): string {
 
   const totalDuration = Date.now() - startTime;
   const passed = results.filter((r) => r.status === 'passed').length;
-  const failed = results.filter((r) => r.status === 'failed').length;
+  const failed = results.filter((r) => r.status === 'failed' || r.status === 'timedOut').length;
   const skipped = results.filter((r) => r.status === 'skipped').length;
   const flaky = results.filter(
     (r) => r.flakinessScore && r.flakinessScore >= 0.3

@@ -221,13 +221,13 @@ export function buildComparison(
       continue;
     }
 
-    // Check for new failures
-    if (test.status === 'failed' && baselineTest.status === 'passed') {
+    // Check for new failures (including timedOut)
+    if ((test.status === 'failed' || test.status === 'timedOut') && baselineTest.status === 'passed') {
       changes.newFailures.push(test);
     }
 
-    // Check for fixed tests
-    if (test.status === 'passed' && baselineTest.status === 'failed') {
+    // Check for fixed tests (including previously timedOut)
+    if (test.status === 'passed' && (baselineTest.status === 'failed' || baselineTest.status === 'timedOut')) {
       changes.fixedTests.push(test);
     }
 
