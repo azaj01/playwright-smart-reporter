@@ -197,6 +197,88 @@ describe('html-generator', () => {
       expect(html).not.toContain('<script>alert("xss")</script>');
       expect(html).toContain('&lt;script&gt;');
     });
+
+    // Issue #19: Large test suites should not crash with RangeError
+    it('strips large base64 data from embedded JSON to prevent RangeError', () => {
+      // Create a large base64 string (simulating a screenshot)
+      const largeBase64 = 'data:image/png;base64,' + 'A'.repeat(100000);
+
+      const data: HtmlGeneratorData = {
+        results: [
+          createMinimalTestResult({
+            screenshot: largeBase64,
+            traceData: 'base64-trace-data-here',
+            attachments: {
+              screenshots: [largeBase64, largeBase64],
+              videos: ['/path/to/video.webm'],
+              traces: ['/path/to/trace.zip'],
+              custom: [{ name: 'custom', contentType: 'text/plain', body: 'base64body' }],
+            },
+          }),
+        ],
+        history: createTestHistory(),
+        startTime: Date.now(),
+        options: {},
+      };
+
+      const html = generateHtml(data);
+
+      // The HTML should be generated successfully
+      expect(html).toContain('<!DOCTYPE html>');
+      expect(html).toContain('</html>');
+
+      // Extract the JavaScript section that contains "const tests = "
+      const jsMatch = html.match(/const tests = (\[[\s\S]*?\]);/);
+      expect(jsMatch).toBeTruthy();
+      const testsJson = jsMatch![1];
+
+      // The embedded JSON should NOT contain the large base64 data
+      expect(testsJson).not.toContain('AAAAAAAAAAAAAAAAA'); // Large base64 content
+      expect(testsJson).toContain('[base64-screenshot]'); // Placeholder
+      expect(testsJson).toContain('[base64-content]'); // Placeholder for custom attachment body
+
+      // But file paths should be preserved in JSON
+      expect(testsJson).toContain('/path/to/video.webm');
+      expect(testsJson).toContain('/path/to/trace.zip');
+
+      // Note: The full base64 may still appear in HTML cards for rendering
+      // That's intentional - we only strip from JSON to reduce size
+    });
+
+    it('handles many tests without exceeding string limits', () => {
+      // Create 100 tests with screenshots (simulating a medium-sized suite)
+      const results = Array.from({ length: 100 }, (_, i) =>
+        createMinimalTestResult({
+          testId: `test-${i}`,
+          title: `Test ${i}`,
+          screenshot: 'data:image/png;base64,' + 'B'.repeat(10000),
+        })
+      );
+
+      const data: HtmlGeneratorData = {
+        results,
+        history: createTestHistory(),
+        startTime: Date.now(),
+        options: {},
+      };
+
+      // Should not throw RangeError
+      const html = generateHtml(data);
+
+      expect(html).toContain('<!DOCTYPE html>');
+      expect(html).toContain('Test 0');
+      expect(html).toContain('Test 99');
+
+      // Extract the JavaScript section that contains "const tests = "
+      const jsMatch = html.match(/const tests = (\[[\s\S]*?\]);/);
+      expect(jsMatch).toBeTruthy();
+      const testsJson = jsMatch![1];
+
+      // Large base64 data should be stripped from embedded JSON
+      expect(testsJson).not.toContain('BBBBBBBBBBBBBBBBB');
+      // Should use placeholder instead
+      expect(testsJson).toContain('[base64-screenshot]');
+    });
   });
 });
 

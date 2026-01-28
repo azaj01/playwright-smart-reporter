@@ -8,8 +8,8 @@ import { renderMarkdownLite } from '../utils';
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
@@ -39,6 +39,12 @@ export class HistoryCollector {
       slackWebhook: options.slackWebhook,
       teamsWebhook: options.teamsWebhook,
       baselineRunId: options.baselineRunId,
+      // Cloud options
+      apiKey: options.apiKey,
+      projectId: options.projectId,
+      uploadToCloud: options.uploadToCloud ?? false,
+      cloudEndpoint: options.cloudEndpoint,
+      uploadArtifacts: options.uploadArtifacts ?? true,
     };
     this.outputDir = outputDir;
     this.currentRun = {

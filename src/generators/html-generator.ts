@@ -470,8 +470,32 @@ export function generateHtml(data: HtmlGeneratorData): string {
     return 0;
   });
 
+  // Issue #19: Strip large binary data from embedded JSON to prevent RangeError with large test suites
+  // The HTML already renders screenshots/traces in cards and gallery, so JavaScript doesn't need them
+  const lightenedResults = results.map(test => {
+    // Destructure to exclude large fields
+    const { screenshot, traceData, networkLogs, attachments, ...rest } = test;
+    // Keep attachment metadata but remove base64 screenshot data
+    const lightenedAttachments = attachments ? {
+      screenshots: attachments.screenshots?.map(s => s.startsWith('data:') ? '[base64-screenshot]' : s) || [],
+      videos: attachments.videos || [],
+      traces: attachments.traces || [],
+      custom: attachments.custom?.map(c => ({
+        ...c,
+        body: c.body ? '[base64-content]' : undefined,
+      })) || [],
+    } : undefined;
+    return {
+      ...rest,
+      // Keep file paths but not base64 data
+      screenshot: screenshot?.startsWith('data:') ? '[base64-screenshot]' : screenshot,
+      tracePath: test.tracePath, // Keep path for trace viewer links
+      attachments: lightenedAttachments,
+    };
+  });
+
   // Escape JSON for safe embedding in HTML <script> tags
-  const testsJson = JSON.stringify(results)
+  const testsJson = JSON.stringify(lightenedResults)
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
     .replace(/&/g, '\\u0026');
@@ -483,8 +507,36 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const enableTraceViewer = options.enableTraceViewer !== false;
   const showTraceSection = enableTraceViewer;
   const enableHistoryDrilldown = options.enableHistoryDrilldown === true;
+  // Issue #19: Also lighten history snapshots to prevent RangeError
+  const lightenedHistorySnapshots = enableHistoryDrilldown && historyRunSnapshots
+    ? Object.fromEntries(
+        Object.entries(historyRunSnapshots).map(([runId, snapshot]) => [
+          runId,
+          {
+            ...snapshot,
+            tests: Object.fromEntries(
+              Object.entries(snapshot.tests || {}).map(([testId, testSnap]) => [
+                testId,
+                {
+                  ...testSnap,
+                  attachments: testSnap.attachments ? {
+                    screenshots: testSnap.attachments.screenshots?.map(s => s.startsWith('data:') ? '[base64-screenshot]' : s) || [],
+                    videos: testSnap.attachments.videos || [],
+                    traces: testSnap.attachments.traces || [],
+                    custom: testSnap.attachments.custom?.map(c => ({
+                      ...c,
+                      body: c.body ? '[base64-content]' : undefined,
+                    })) || [],
+                  } : undefined,
+                },
+              ])
+            ),
+          },
+        ])
+      )
+    : {};
   const historyRunSnapshotsJson = enableHistoryDrilldown
-    ? JSON.stringify(historyRunSnapshots || {})
+    ? JSON.stringify(lightenedHistorySnapshots)
         .replace(/</g, '\\u003c')
         .replace(/>/g, '\\u003e')
         .replace(/&/g, '\\u0026')
