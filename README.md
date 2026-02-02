@@ -155,31 +155,56 @@ export default defineConfig({
 
 ### Configuration Options
 
+#### Core Options
+
 | Option | Default | Description |
 |--------|---------|-------------|
 | `outputFile` | `smart-report.html` | Path for the HTML report |
 | `historyFile` | `test-history.json` | Path for test history storage |
 | `maxHistoryRuns` | `10` | Number of runs to keep in history |
-| `performanceThreshold` | `0.2` | Threshold for performance regression (20%) |
+| `performanceThreshold` | `0.2` | Threshold for performance regression alerts (0.2 = 20% slower than average) |
 | `slackWebhook` | - | Slack webhook URL for failure notifications |
 | `teamsWebhook` | - | Microsoft Teams webhook URL for notifications |
+
+#### Feature Flags
+
+| Option | Default | Description |
+|--------|---------|-------------|
 | `enableRetryAnalysis` | `true` | Track tests that frequently need retries |
-| `enableFailureClustering` | `true` | Group similar failures by error type |
-| `enableStabilityScore` | `true` | Show stability scores (0-100) with letter grades |
-| `enableGalleryView` | `true` | Display attachment gallery view |
+| `enableFailureClustering` | `true` | Group similar failures by error type for batch fixing |
+| `enableStabilityScore` | `true` | Show stability scores (0-100) with letter grades (A+ to F) |
+| `enableGalleryView` | `true` | Display attachment gallery view with screenshots, videos, traces |
 | `enableComparison` | `true` | Enable run comparison against baseline |
-| `enableAIRecommendations` | `true` | Generate AI-powered recommendations |
-| `enableTraceViewer` | `true` | Enable "View Trace" actions |
-| `enableHistoryDrilldown` | `true` | Store per-run snapshots for historical navigation |
-| `enableNetworkLogs` | `true` | Extract and display network requests from traces |
-| `networkLogExcludeAssets` | `true` | Exclude static assets (images, fonts, CSS, JS) |
+| `enableAIRecommendations` | `true` | Generate AI-powered fix suggestions for failures |
+| `enableTrendsView` | `true` | Show interactive trend charts for pass rate, duration, flakiness |
+| `enableTraceViewer` | `true` | Enable inline "View Trace" modal and download actions |
+| `enableHistoryDrilldown` | `false` | Store per-run snapshots for clicking history dots to view past results |
+| `enableNetworkLogs` | `true` | Extract and display network requests from trace files |
+
+#### Network Logging Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `networkLogFilter` | - | Only show network requests where URL contains this string (e.g., `'api.example.com'`) |
+| `networkLogExcludeAssets` | `true` | Exclude static assets (images, fonts, CSS, JS, etc.) from network logs |
 | `networkLogMaxEntries` | `50` | Maximum network entries to display per test |
-| `stabilityThreshold` | `70` | Minimum stability score (C grade) to avoid warnings |
-| `retryFailureThreshold` | `3` | Number of retries before flagging as problematic |
-| `baselineRunId` | - | Optional: Run ID to use as baseline for comparisons |
-| `filterPwApiSteps` | `false` | Hide verbose `pw:api` steps, only show custom `test.step` entries |
-| `relativeToCwd` | `false` | Resolve outputFile/historyFile relative to current working directory instead of Playwright's rootDir |
-| `projectName` | - | Isolate history per project (e.g., 'api', 'ui'). Supports `{project}` placeholder in historyFile |
+
+#### Threshold Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `stabilityThreshold` | `70` | Minimum stability score to avoid warnings (70 = C grade) |
+| `retryFailureThreshold` | `3` | Number of retries before flagging test as problematic |
+| `baselineRunId` | - | Specific run ID to compare against (defaults to previous run) |
+
+#### Advanced Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `filterPwApiSteps` | `false` | Hide verbose `pw:api` steps (e.g., `page.click()`), only show custom `test.step` entries |
+| `relativeToCwd` | `false` | Resolve paths relative to current working directory instead of Playwright's rootDir |
+| `projectName` | - | Isolate history per project. Supports `{project}` placeholder in historyFile |
+| `cspSafe` | `false` | Content Security Policy safe mode: saves screenshots as files instead of base64, uses system fonts |
 
 
 ### AI Analysis
@@ -292,12 +317,37 @@ This historical approach helps identify tests that need attention even if they h
 
 ## Stability Grades
 
-- **A+ (95-100)**: Rock solid, consistently passing
-- **A (90-94)**: Very stable with rare failures
-- **B (80-89)**: Generally stable with occasional issues
-- **C (70-79)**: Moderately stable, needs attention
-- **D (60-69)**: Unstable, frequent failures
-- **F (<60)**: Critically unstable, requires immediate attention
+The stability score is a composite metric (0-100) calculated from three factors:
+
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| **Reliability** | 40% | Based on pass rate from historical data |
+| **Flakiness** | 35% | Inverse of flakiness score (lower flakiness = higher score) |
+| **Performance** | 25% | Consistency of execution time (less variance = higher score) |
+
+### Grade Thresholds
+
+| Grade | Score Range | Description |
+|-------|-------------|-------------|
+| **A+** | 95-100 | Rock solid, consistently passing |
+| **A** | 90-94 | Very stable with rare failures |
+| **B** | 80-89 | Generally stable with occasional issues |
+| **C** | 70-79 | Moderately stable, needs attention |
+| **D** | 60-69 | Unstable, frequent failures |
+| **F** | < 60 | Critically unstable, requires immediate attention |
+
+Tests with grades below your `stabilityThreshold` (default: 70 / C grade) are flagged with "Needs Attention" badges.
+
+## Failure Clustering
+
+The reporter automatically groups test failures by error type to help identify systematic issues:
+
+- **Error Fingerprinting** - Failures are grouped by error message pattern (first line of stack trace)
+- **Cluster Count** - Shows how many tests share the same root cause
+- **Affected Files** - Lists which spec files contain the clustered failures
+- **AI Analysis** - When enabled, provides a single fix suggestion for the entire cluster
+
+This helps you fix multiple tests at once when they fail for the same reason (e.g., a broken API endpoint, missing element, or configuration issue).
 
 ## Performance Trends
 
@@ -327,6 +377,25 @@ Alternatively, open traces via command line:
 
 ```bash
 npx playwright-smart-reporter-view-trace ./traces/<trace>.zip
+```
+
+#### Options
+
+| Flag | Description |
+|------|-------------|
+| `--dir <dir>` | Resolve trace path relative to this directory (default: current directory) |
+| `-h, --help` | Show help message |
+
+#### Examples
+
+```bash
+# Open a trace file directly
+npx playwright-smart-reporter-view-trace ./traces/my-test-trace-0.zip
+
+# Open a trace relative to report directory
+npx playwright-smart-reporter-view-trace my-test-trace-0.zip --dir ./example
+
+# The tool will search common locations if the file isn't found directly
 ```
 
 ## Network Logs
@@ -370,6 +439,70 @@ use: {
   trace: 'retain-on-failure',  // or 'on' to always capture
 }
 ```
+
+## CSP-Safe Mode
+
+If your organization has strict Content Security Policy (CSP) requirements, enable `cspSafe` mode:
+
+```typescript
+reporter: [
+  ['playwright-smart-reporter', {
+    cspSafe: true,
+  }],
+]
+```
+
+### What CSP-Safe Mode Does
+
+| Feature | Default Mode | CSP-Safe Mode |
+|---------|--------------|---------------|
+| Screenshots | Base64 data URIs embedded in HTML | Saved as separate PNG/JPEG files |
+| Fonts | Google Fonts (external) | System fonts only |
+| Trace data | Base64 embedded | File references only |
+| Report size | Larger (self-contained) | Smaller (external files) |
+
+### When to Use CSP-Safe Mode
+
+- **Jenkins** or other CI systems with strict CSP headers
+- **Corporate environments** that block inline data URIs
+- **Large test suites** where embedded screenshots cause memory issues
+- **Sharing reports** where smaller file size is preferred
+
+**Note:** In CSP-safe mode, screenshots are saved alongside the HTML report. Make sure to include the entire report directory when archiving or sharing.
+
+## History Drilldown
+
+Enable `enableHistoryDrilldown` to click on history dots and view detailed results from previous runs:
+
+```typescript
+reporter: [
+  ['playwright-smart-reporter', {
+    enableHistoryDrilldown: true,  // Default: false
+    maxHistoryRuns: 10,
+  }],
+]
+```
+
+### How It Works
+
+1. Each test card shows history dots representing recent runs (pass/fail indicators)
+2. Click any dot to view that test's result from that historical run
+3. A banner appears showing which run you're viewing
+4. Click "Back to Current" to return to the latest results
+
+### Storage Implications
+
+When enabled, the reporter stores a JSON snapshot for each run in `history-runs/` directory alongside your history file:
+
+```
+test-history.json
+history-runs/
+  run-1706900000000.json
+  run-1706900001000.json
+  ...
+```
+
+**Disk usage:** ~1-5KB per test per run. For a suite of 500 tests with 10 runs retained, expect ~25-50MB of history data.
 
 ## Step Filtering
 
@@ -664,12 +797,92 @@ npx playwright-smart-reporter-merge-history \
   -o blob-reports/merged/test-history.json
 ```
 
+### Merge History CLI Reference
+
+The `playwright-smart-reporter-merge-history` command combines history files from parallel CI runs.
+
+#### Options
+
+| Flag | Description |
+|------|-------------|
+| `-o, --output <file>` | Output file path (default: `merged-history.json`) |
+| `--max-runs <number>` | Limit history to N most recent runs |
+| `-h, --help` | Show help message |
+
+#### Examples
+
+```bash
+# Basic merge of two files
+npx playwright-smart-reporter-merge-history \
+  run1/test-history.json \
+  run2/test-history.json \
+  -o merged-history.json
+
+# Merge with glob pattern (requires glob package)
+npx playwright-smart-reporter-merge-history \
+  'blob-reports/**/test-history.json' \
+  -o test-history.json
+
+# Limit to 10 most recent runs to manage history size
+npx playwright-smart-reporter-merge-history \
+  run1/test-history.json \
+  run2/test-history.json \
+  -o merged.json \
+  --max-runs 10
+```
+
+#### What Gets Merged
+
+- **Test entries** - Combined and sorted by timestamp
+- **Run metadata** - Deduplicated by run ID
+- **Run summaries** - Deduplicated and sorted chronologically
+- **Pass rates** - Recalculated from merged data
+
 #### 4. Merge blob reports
 
 ```bash
 cp blob-reports/machine1/*.zip blob-reports/machine2/*.zip blob-reports/merged/
 npx playwright merge-reports --reporter=playwright-smart-reporter blob-reports/merged
 ```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Report shows "No history data"
+- **Cause:** History file doesn't exist or is in wrong location
+- **Fix:** Ensure `historyFile` path is correct and file persists between runs (use CI caching)
+
+#### Network logs not appearing
+- **Cause:** Tracing is not enabled in Playwright config
+- **Fix:** Add `trace: 'retain-on-failure'` or `trace: 'on'` to your `use` config
+
+#### Screenshots not displaying in CSP-safe mode
+- **Cause:** Screenshot files are not in same directory as HTML report
+- **Fix:** Ensure entire report directory is copied/archived, not just the HTML file
+
+#### AI suggestions not appearing
+- **Cause:** No API key configured or API errors
+- **Fix:** Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` environment variable
+
+#### History metrics are mixed between projects
+- **Cause:** Same history file used for different test suites
+- **Fix:** Use `projectName` option to isolate history per project
+
+#### Paths resolve to wrong location
+- **Cause:** Paths relative to Playwright's `rootDir` instead of project root
+- **Fix:** Enable `relativeToCwd: true` or use absolute paths
+
+#### Large report causes browser to hang
+- **Cause:** Too many tests with embedded screenshots/traces
+- **Fix:** Enable `cspSafe: true` to save attachments as files, or reduce `maxHistoryRuns`
+
+### Debug Mode
+
+For debugging reporter issues, check console output for:
+- `📊 Smart Report:` - Shows where report was saved
+- `🤖 Analyzing X failure(s) with AI...` - Confirms AI analysis is running
+- Errors during report generation are logged to console
 
 ## Development
 
